@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  lora-manager:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - DB_PATH=/data/lora_manager.db
+    volumes:
+      - lora-data:/data
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    restart: unless-stopped
+
+volumes:
+  lora-data:
+  mosquitto-data:
+  mosquitto-log:
