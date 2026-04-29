@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchLogs, fetchNodes } from '../api/client';
+import { getNodeDisplayName } from '../types';
 
 type LogLevel = '' | 'info' | 'warning' | 'error';
 type LogCategory = '' | 'system' | 'mqtt' | 'node' | 'command';
@@ -15,11 +16,13 @@ export default function Logs() {
     queryFn: fetchNodes,
   });
 
+  const nodeAddress = nodeFilter ? parseInt(nodeFilter, 10) : undefined;
+
   const { data: logs, isLoading } = useQuery({
-    queryKey: ['logs', nodeFilter, levelFilter, categoryFilter],
+    queryKey: ['logs', nodeAddress, levelFilter, categoryFilter],
     queryFn: () =>
       fetchLogs({
-        node_name: nodeFilter || undefined,
+        node_address: nodeAddress,
         level: levelFilter || undefined,
         category: categoryFilter || undefined,
         limit: 200,
@@ -56,6 +59,12 @@ export default function Logs() {
     return date.toLocaleString();
   };
 
+  const getNodeName = (address: number | null) => {
+    if (address === null) return null;
+    const node = nodes?.find((n) => n.address === address);
+    return node ? getNodeDisplayName(node) : `Node ${address}`;
+  };
+
   const clearFilters = () => {
     setNodeFilter('');
     setLevelFilter('');
@@ -77,14 +86,14 @@ export default function Logs() {
                 <span className="label-text">Node</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full sm:w-40"
+                className="select select-bordered select-sm w-full sm:w-48"
                 value={nodeFilter}
                 onChange={(e) => setNodeFilter(e.target.value)}
               >
                 <option value="">All nodes</option>
                 {nodes?.map((node) => (
-                  <option key={node.name} value={node.name}>
-                    {node.name}
+                  <option key={node.address} value={node.address.toString()}>
+                    {getNodeDisplayName(node)} ({node.address})
                   </option>
                 ))}
               </select>
@@ -157,9 +166,9 @@ export default function Logs() {
                     <span className={`${getCategoryBadge(log.category)} badge-xs`}>
                       {log.category}
                     </span>
-                    {log.node_name && (
+                    {log.node_address !== null && (
                       <span className="badge badge-ghost badge-xs">
-                        {log.node_name}
+                        {getNodeName(log.node_address)}
                       </span>
                     )}
                   </div>

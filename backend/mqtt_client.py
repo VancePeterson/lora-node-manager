@@ -11,8 +11,8 @@ from models import AppSettings, GatewayStatus, MqttStatus, NodeState
 
 logger = logging.getLogger(__name__)
 
-# In-memory state
-nodes: dict[str, NodeState] = {}
+# In-memory state - keyed by address (int)
+nodes: dict[int, NodeState] = {}
 gateway_status = GatewayStatus()
 
 # Callbacks for WebSocket broadcasts
@@ -36,67 +36,75 @@ def _notify_update(event_type: str, payload: dict[str, Any]) -> None:
             logger.error(f"Error in update callback: {e}")
 
 
-def _get_or_create_node(name: str) -> NodeState:
-    if name not in nodes:
-        nodes[name] = NodeState(name=name, address=0)
-    return nodes[name]
+def _get_or_create_node(address: int) -> NodeState:
+    """Get or create a node by its address."""
+    if address not in nodes:
+        # Auto-discover: create node with address, empty name (user can set later)
+        nodes[address] = NodeState(address=address, name="")
+        logger.info(f"Auto-discovered node at address {address}")
+    return nodes[address]
 
 
-async def _handle_state_message(node_name: str, payload: dict[str, Any]) -> None:
-    node = _get_or_create_node(node_name)
+def get_node_display_name(node: NodeState) -> str:
+    """Get display name for a node, falling back to address if no name set."""
+    return node.name if node.name else f"Node {node.address}"
+
+
+async def _handle_state_message(address: int, payload: dict[str, Any]) -> None:
+    node = _get_or_create_node(address)
     node.telemetry = payload
     node.last_seen = datetime.utcnow()
     node.packets_rx += 1
-    _notify_update("node_state", {"name": node_name, "state": node.model_dump(mode="json")})
+    _notify_update("node_state", {"address": address, "state": node.model_dump(mode="json")})
     await add_log(
-        f"Received telemetry from {node_name}",
+        f"Received telemetry from {get_node_display_name(node)}",
         level="info",
         category="node",
-        node_name=node_name,
+        node_address=address,
         details=payload,
     )
 
 
-async def _handle_online_message(node_name: str, payload: str) -> None:
-    node = _get_or_create_node(node_name)
+async def _handle_online_message(address: int, payload: str) -> None:
+    node = _get_or_create_node(address)
     was_online = node.online
     node.online = payload.lower() == "online"
     node.last_seen = datetime.utcnow()
-    _notify_update("node_online", {"name": node_name, "online": node.online})
+    _notify_update("node_online", {"address": address, "online": node.online})
 
     if node.online != was_online:
         await add_log(
-            f"Node {node_name} is now {'online' if node.online else 'offline'}",
+            f"{get_node_display_name(node)} is now {'online' if node.online else 'offline'}",
             level="info" if node.online else "warning",
             category="node",
-            node_name=node_name,
+            node_address=address,
         )
 
 
-async def _handle_rssi_message(node_name: str, payload: str) -> None:
+async def _handle_rssi_message(address: int, payload: str) -> None:
     try:
         rssi = int(payload)
-        node = _get_or_create_node(node_name)
+        node = _get_or_create_node(address)
         node.rssi = rssi
         node.last_seen = datetime.utcnow()
         if node.snr is not None:
-            await add_rssi_history(node_name, rssi, node.snr)
-        _notify_update("node_rssi", {"name": node_name, "rssi": rssi})
+            await add_rssi_history(address, rssi, node.snr)
+        _notify_update("node_rssi", {"address": address, "rssi": rssi})
     except ValueError:
-        logger.warning(f"Invalid RSSI value for {node_name}: {payload}")
+        logger.warning(f"Invalid RSSI value for address {address}: {payload}")
 
 
-async def _handle_snr_message(node_name: str, payload: str) -> None:
+async def _handle_snr_message(address: int, payload: str) -> None:
     try:
         snr = float(payload)
-        node = _get_or_create_node(node_name)
+        node = _get_or_create_node(address)
         node.snr = snr
         node.last_seen = datetime.utcnow()
         if node.rssi is not None:
-            await add_rssi_history(node_name, node.rssi, snr)
-        _notify_update("node_snr", {"name": node_name, "snr": snr})
+            await add_rssi_history(address, node.rssi, snr)
+        _notify_update("node_snr", {"address": address, "snr": snr})
     except ValueError:
-        logger.warning(f"Invalid SNR value for {node_name}: {payload}")
+        logger.warning(f"Invalid SNR value for address {address}: {payload}")
 
 
 async def _handle_gateway_status(payload: dict[str, Any]) -> None:
@@ -152,6 +160,13 @@ class MqttClient:
         await self.stop()
         await self.start(app_settings)
 
+    async def publish(self, topic: str, payload: str) -> None:
+        """Publish a message to an MQTT topic."""
+        if not self._client or not self._connected:
+            raise RuntimeError("MQTT client not connected")
+        await self._client.publish(topic, payload)
+        logger.info(f"Published to {topic}: {payload}")
+
     async def _process_message(self, topic: str, payload_bytes: bytes) -> None:
         if not self._settings:
             return
@@ -177,23 +192,31 @@ class MqttClient:
                 logger.warning(f"Invalid JSON on {topic}")
             return
 
-        # Node messages: lora/{node_name}/{type}
+        # Node messages: lora/{address}/{type}
         if len(topic_parts) == 3:
-            node_name = topic_parts[1]
+            address_str = topic_parts[1]
             msg_type = topic_parts[2]
+
+            # Parse address as integer
+            try:
+                address = int(address_str)
+            except ValueError:
+                # Not a numeric address, ignore (could be legacy topic)
+                logger.debug(f"Ignoring non-numeric address in topic: {topic}")
+                return
 
             if msg_type == "state":
                 try:
                     payload = json.loads(payload_str)
-                    await _handle_state_message(node_name, payload)
+                    await _handle_state_message(address, payload)
                 except json.JSONDecodeError:
                     logger.warning(f"Invalid JSON on {topic}")
             elif msg_type == "online":
-                await _handle_online_message(node_name, payload_str)
+                await _handle_online_message(address, payload_str)
             elif msg_type == "rssi":
-                await _handle_rssi_message(node_name, payload_str)
+                await _handle_rssi_message(address, payload_str)
             elif msg_type == "snr":
-                await _handle_snr_message(node_name, payload_str)
+                await _handle_snr_message(address, payload_str)
 
     async def _run(self) -> None:
         if not self._settings:

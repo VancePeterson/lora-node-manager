@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchNodes } from '../api/client';
+import { getNodeDisplayName } from '../types';
 
 function getSignalBadge(rssi: number): { className: string; label: string; color: string } {
   if (rssi >= -70) return { className: 'badge badge-success', label: 'Excellent', color: '#16a34a' };
@@ -96,13 +97,13 @@ export default function Network() {
                 const barWidth = getSignalBarWidth(node.rssi!);
 
                 return (
-                  <div key={node.name}>
+                  <div key={node.address}>
                     <div className="flex justify-between mb-1">
                       <Link
-                        to={`/nodes/${encodeURIComponent(node.name)}`}
+                        to={`/nodes/${node.address}`}
                         className="link link-primary text-sm"
                       >
-                        {node.name}
+                        {getNodeDisplayName(node)}
                       </Link>
                       <span className={`${signalInfo.className} badge-sm`}>
                         {node.rssi} dBm ({signalInfo.label})
@@ -139,6 +140,7 @@ export default function Network() {
                 <thead>
                   <tr>
                     <th>Node</th>
+                    <th>Address</th>
                     <th>RSSI</th>
                     <th>SNR</th>
                     <th>Quality</th>
@@ -150,15 +152,16 @@ export default function Network() {
                   {nodesWithSignal.map((node) => {
                     const signalInfo = getSignalBadge(node.rssi!);
                     return (
-                      <tr key={node.name}>
+                      <tr key={node.address}>
                         <td>
                           <Link
-                            to={`/nodes/${encodeURIComponent(node.name)}`}
+                            to={`/nodes/${node.address}`}
                             className="link link-primary"
                           >
-                            {node.name}
+                            {getNodeDisplayName(node)}
                           </Link>
                         </td>
+                        <td className="font-mono text-sm">{node.address}</td>
                         <td>{node.rssi} dBm</td>
                         <td>{node.snr !== null ? `${node.snr.toFixed(1)} dB` : '-'}</td>
                         <td>

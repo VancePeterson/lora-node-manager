@@ -6,15 +6,30 @@ This document describes the MQTT topic structure used by the ESP32 gateway and c
 
 All topics use a configurable prefix (default: `lora`). Examples below use this default.
 
+## Address-Based Topics
+
+Topics use the **node's LoRa address** (integer) as the identifier, not names. This design:
+
+- Keeps the gateway "dumb" - it just forwards packets without needing configuration
+- Allows display names to be changed without affecting MQTT routing
+- Uses the same address configured on the RYLR998 module
+
+| Node Address | Display Name | MQTT Topics |
+|--------------|--------------|-------------|
+| 5 | Chicken Coop | `lora/5/*` |
+| 12 | Kitchen Sensor | `lora/12/*` |
+| 100 | Garage Door | `lora/100/*` |
+
 ## Topic Structure
 
 ```
 lora/
-├── {node_name}/
+├── {address}/
 │   ├── state           # Decoded telemetry (JSON)
 │   ├── online          # Online status
 │   ├── rssi            # Signal strength
 │   ├── snr             # Signal-to-noise ratio
+│   ├── command         # Commands TO the node
 │   ├── last_seen       # Unix timestamp
 │   └── gap_count       # Missed sequence numbers
 └── gateway/
@@ -23,14 +38,14 @@ lora/
 
 ## Node Topics
 
-### `lora/{node_name}/state`
+### `lora/{address}/state`
 
 Decoded telemetry from the node. Content varies by node type.
 
 **Retained:** Yes
 **QoS:** 0
 
-**Example (sensor node):**
+**Example (sensor node at address 5):**
 ```json
 {
   "temperature": 23.5,
@@ -40,7 +55,7 @@ Decoded telemetry from the node. Content varies by node type.
 }
 ```
 
-**Example (relay node):**
+**Example (relay node at address 12):**
 ```json
 {
   "relay_state": true,
@@ -49,7 +64,7 @@ Decoded telemetry from the node. Content varies by node type.
 }
 ```
 
-### `lora/{node_name}/online`
+### `lora/{address}/online`
 
 Node online/offline status based on heartbeat timeout.
 
@@ -58,7 +73,7 @@ Node online/offline status based on heartbeat timeout.
 
 **Payload:** `online` or `offline`
 
-### `lora/{node_name}/rssi`
+### `lora/{address}/rssi`
 
 Received Signal Strength Indicator of last received packet.
 
@@ -73,7 +88,7 @@ Typical ranges:
 - `-70 to -90`: Fair
 - `-90 to -120`: Poor
 
-### `lora/{node_name}/snr`
+### `lora/{address}/snr`
 
 Signal-to-Noise Ratio of last received packet.
 
@@ -88,7 +103,27 @@ Typical ranges:
 - `-7 to 0`: Fair
 - `< -7`: Poor
 
-### `lora/{node_name}/last_seen`
+### `lora/{address}/command`
+
+Commands sent from the manager to the node via the gateway.
+
+**Direction:** Manager → Gateway → Node
+**Retained:** No
+**QoS:** 0
+
+**Payload:** Plain text command string
+
+**Examples:**
+```
+PING
+STATUS
+REBOOT
+CONFIG?
+```
+
+The manager publishes commands via `POST /api/nodes/{address}/command` which sends to this topic.
+
+### `lora/{address}/last_seen`
 
 Unix timestamp of last received packet.
 
@@ -97,7 +132,7 @@ Unix timestamp of last received packet.
 
 **Payload:** Integer (Unix epoch seconds), e.g., `1714300000`
 
-### `lora/{node_name}/gap_count`
+### `lora/{address}/gap_count`
 
 Count of missed sequence numbers (packet loss indicator).
 
@@ -131,37 +166,6 @@ Gateway health and status information.
 }
 ```
 
-## Command Topics (Future)
-
-Reserved for sending commands to nodes via the gateway:
-
-### `lora/{node_name}/command`
-
-**Direction:** Manager → Gateway → Node
-
-**Payload:**
-```json
-{
-  "action": "set_relay",
-  "params": {
-    "state": true
-  }
-}
-```
-
-### `lora/{node_name}/command/result`
-
-**Direction:** Node → Gateway → Manager
-
-**Payload:**
-```json
-{
-  "success": true,
-  "action": "set_relay",
-  "error": null
-}
-```
-
 ## LoRa Frame Format
 
 The ESP32 gateway receives raw LoRa frames and decodes them to MQTT.
@@ -176,8 +180,10 @@ RYLR998 modules use hex-encoded payloads:
 
 Example:
 ```
-+RCV=2,8,01420A1E00FF00FF,-75,8
++RCV=5,8,01420A1E00FF00FF,-75,8
 ```
+
+The address in `+RCV` becomes the topic path (e.g., address `5` → `lora/5/state`).
 
 ### Frame Structure
 
@@ -210,24 +216,24 @@ Example:
 The LoRa Node Manager subscribes to:
 
 ```
-lora/+/state
-lora/+/online
-lora/+/rssi
-lora/+/snr
-lora/+/last_seen
-lora/+/gap_count
-lora/gateway/status
+lora/#
 ```
 
-Using `+` wildcard to match all node names.
+This captures all topics under the prefix.
 
 ## Publishing
 
-The manager may publish to (future):
+The manager publishes to:
 
 ```
-lora/{node_name}/command
-lora/gateway/command
+lora/{address}/command    # Send commands to specific node
+```
+
+Commands are sent via the API endpoint `POST /api/nodes/{address}/command` with body:
+```json
+{
+  "command": "PING"
+}
 ```
 
 ## Testing
@@ -241,10 +247,27 @@ mosquitto_sub -h <broker> -t 'lora/#' -v
 ### Simulate Node Telemetry
 
 ```bash
-mosquitto_pub -h <broker> -t 'lora/test_node/state' -r -m '{"temperature": 22.5, "humidity": 50.0, "seq": 1}'
-mosquitto_pub -h <broker> -t 'lora/test_node/online' -r -m 'online'
-mosquitto_pub -h <broker> -t 'lora/test_node/rssi' -r -m '-72'
-mosquitto_pub -h <broker> -t 'lora/test_node/snr' -r -m '8.5'
+# Node at address 5 (e.g., Chicken Coop)
+mosquitto_pub -h <broker> -t 'lora/5/state' -r -m '{"temperature": 22.5, "humidity": 50.0, "seq": 1}'
+mosquitto_pub -h <broker> -t 'lora/5/online' -r -m 'online'
+mosquitto_pub -h <broker> -t 'lora/5/rssi' -r -m '-72'
+mosquitto_pub -h <broker> -t 'lora/5/snr' -r -m '8.5'
+
+# Node at address 12 (e.g., Kitchen Sensor)
+mosquitto_pub -h <broker> -t 'lora/12/state' -r -m '{"temperature": 20.0, "humidity": 45.0}'
+mosquitto_pub -h <broker> -t 'lora/12/online' -r -m 'online'
+```
+
+### Test Command Sending
+
+```bash
+# Listen for commands
+mosquitto_sub -h <broker> -t 'lora/+/command' -v
+
+# In another terminal, send command via API
+curl -X POST http://localhost:8080/api/nodes/5/command \
+  -H "Content-Type: application/json" \
+  -d '{"command": "PING"}'
 ```
 
 ---

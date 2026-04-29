@@ -13,28 +13,30 @@ _db_path: str = settings.database.path
 
 async def init_db() -> None:
     async with aiosqlite.connect(_db_path) as db:
+        # Nodes table - address is primary key
         await db.execute("""
             CREATE TABLE IF NOT EXISTS nodes (
-                name TEXT PRIMARY KEY,
-                address INTEGER NOT NULL,
+                address INTEGER PRIMARY KEY,
+                name TEXT DEFAULT '',
                 description TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
         """)
+        # RSSI history - references node by address
         await db.execute("""
             CREATE TABLE IF NOT EXISTS rssi_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                node_name TEXT NOT NULL,
+                node_address INTEGER NOT NULL,
                 timestamp TEXT NOT NULL,
                 rssi INTEGER NOT NULL,
                 snr REAL NOT NULL,
-                FOREIGN KEY (node_name) REFERENCES nodes(name)
+                FOREIGN KEY (node_address) REFERENCES nodes(address)
             )
         """)
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_rssi_history_node_time
-            ON rssi_history(node_name, timestamp DESC)
+            ON rssi_history(node_address, timestamp DESC)
         """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS app_settings (
@@ -42,13 +44,14 @@ async def init_db() -> None:
                 value TEXT NOT NULL
             )
         """)
+        # Logs table - references node by address
         await db.execute("""
             CREATE TABLE IF NOT EXISTS logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
                 level TEXT NOT NULL DEFAULT 'info',
                 category TEXT NOT NULL DEFAULT 'system',
-                node_name TEXT,
+                node_address INTEGER,
                 message TEXT NOT NULL,
                 details TEXT
             )
@@ -59,7 +62,7 @@ async def init_db() -> None:
         """)
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_logs_node
-            ON logs(node_name, timestamp DESC)
+            ON logs(node_address, timestamp DESC)
         """)
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_logs_category
@@ -75,17 +78,17 @@ async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
         yield db
 
 
-async def get_node_config(name: str) -> NodeConfig | None:
+async def get_node_config(address: int) -> NodeConfig | None:
     async with get_db() as db:
         cursor = await db.execute(
-            "SELECT name, address, description FROM nodes WHERE name = ?",
-            (name,),
+            "SELECT address, name, description FROM nodes WHERE address = ?",
+            (address,),
         )
         row = await cursor.fetchone()
         if row:
             return NodeConfig(
-                name=row["name"],
                 address=row["address"],
+                name=row["name"],
                 description=row["description"],
             )
         return None
@@ -94,13 +97,13 @@ async def get_node_config(name: str) -> NodeConfig | None:
 async def get_all_node_configs() -> list[NodeConfig]:
     async with get_db() as db:
         cursor = await db.execute(
-            "SELECT name, address, description FROM nodes"
+            "SELECT address, name, description FROM nodes"
         )
         rows = await cursor.fetchall()
         return [
             NodeConfig(
-                name=row["name"],
                 address=row["address"],
+                name=row["name"],
                 description=row["description"],
             )
             for row in rows
@@ -112,41 +115,41 @@ async def upsert_node_config(config: NodeConfig) -> None:
     async with get_db() as db:
         await db.execute(
             """
-            INSERT INTO nodes (name, address, description, created_at, updated_at)
+            INSERT INTO nodes (address, name, description, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(name) DO UPDATE SET
-                address = excluded.address,
+            ON CONFLICT(address) DO UPDATE SET
+                name = excluded.name,
                 description = excluded.description,
                 updated_at = excluded.updated_at
             """,
-            (config.name, config.address, config.description, now, now),
+            (config.address, config.name, config.description, now, now),
         )
         await db.commit()
 
 
-async def add_rssi_history(node_name: str, rssi: int, snr: float) -> None:
+async def add_rssi_history(node_address: int, rssi: int, snr: float) -> None:
     now = datetime.utcnow().isoformat()
     async with get_db() as db:
         await db.execute(
-            "INSERT INTO rssi_history (node_name, timestamp, rssi, snr) VALUES (?, ?, ?, ?)",
-            (node_name, now, rssi, snr),
+            "INSERT INTO rssi_history (node_address, timestamp, rssi, snr) VALUES (?, ?, ?, ?)",
+            (node_address, now, rssi, snr),
         )
         await db.commit()
 
 
 async def get_rssi_history(
-    node_name: str, hours: int = 24, limit: int = 1000
+    node_address: int, hours: int = 24, limit: int = 1000
 ) -> list[RssiHistoryEntry]:
     cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
     async with get_db() as db:
         cursor = await db.execute(
             """
             SELECT timestamp, rssi, snr FROM rssi_history
-            WHERE node_name = ? AND timestamp > ?
+            WHERE node_address = ? AND timestamp > ?
             ORDER BY timestamp DESC
             LIMIT ?
             """,
-            (node_name, cutoff, limit),
+            (node_address, cutoff, limit),
         )
         rows = await cursor.fetchall()
         return [
@@ -219,7 +222,7 @@ async def add_log(
     message: str,
     level: str = "info",
     category: str = "system",
-    node_name: str | None = None,
+    node_address: int | None = None,
     details: dict | None = None,
 ) -> None:
     """Add a log entry to the database."""
@@ -228,28 +231,28 @@ async def add_log(
     async with get_db() as db:
         await db.execute(
             """
-            INSERT INTO logs (timestamp, level, category, node_name, message, details)
+            INSERT INTO logs (timestamp, level, category, node_address, message, details)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (now, level, category, node_name, message, details_json),
+            (now, level, category, node_address, message, details_json),
         )
         await db.commit()
 
 
 async def get_logs(
-    node_name: str | None = None,
+    node_address: int | None = None,
     level: str | None = None,
     category: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[LogEntry]:
     """Query logs with optional filters."""
-    query = "SELECT id, timestamp, level, category, node_name, message, details FROM logs WHERE 1=1"
+    query = "SELECT id, timestamp, level, category, node_address, message, details FROM logs WHERE 1=1"
     params: list = []
 
-    if node_name:
-        query += " AND node_name = ?"
-        params.append(node_name)
+    if node_address is not None:
+        query += " AND node_address = ?"
+        params.append(node_address)
     if level:
         query += " AND level = ?"
         params.append(level)
@@ -269,7 +272,7 @@ async def get_logs(
                 timestamp=datetime.fromisoformat(row["timestamp"]),
                 level=row["level"],
                 category=row["category"],
-                node_name=row["node_name"],
+                node_address=row["node_address"],
                 message=row["message"],
                 details=json.loads(row["details"]) if row["details"] else None,
             )

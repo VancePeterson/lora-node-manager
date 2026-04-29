@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchNode, fetchNodeHistory } from '../api/client';
+import { getNodeDisplayName } from '../types';
 
 function getSignalBadge(rssi: number): { className: string; label: string } {
   if (rssi >= -70) return { className: 'badge badge-success', label: 'Excellent' };
@@ -10,21 +11,36 @@ function getSignalBadge(rssi: number): { className: string; label: string } {
 }
 
 export default function NodeDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { address } = useParams<{ address: string }>();
+  const addressNum = parseInt(address ?? '', 10);
 
   const { data: node, isLoading: nodeLoading, error: nodeError } = useQuery({
-    queryKey: ['node', name],
-    queryFn: () => fetchNode(name!),
-    enabled: !!name,
+    queryKey: ['node', addressNum],
+    queryFn: () => fetchNode(addressNum),
+    enabled: !isNaN(addressNum),
     refetchInterval: 5000,
   });
 
   const { data: history } = useQuery({
-    queryKey: ['nodeHistory', name],
-    queryFn: () => fetchNodeHistory(name!, 24),
-    enabled: !!name,
+    queryKey: ['nodeHistory', addressNum],
+    queryFn: () => fetchNodeHistory(addressNum, 24),
+    enabled: !isNaN(addressNum),
     refetchInterval: 30000,
   });
+
+  if (isNaN(addressNum)) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Node Details</h1>
+        <div className="alert alert-error">
+          <span>Invalid node address</span>
+        </div>
+        <Link to="/nodes" className="btn btn-ghost">
+          Back to nodes
+        </Link>
+      </div>
+    );
+  }
 
   if (nodeLoading) {
     return (
@@ -80,7 +96,8 @@ export default function NodeDetail() {
           </svg>
           Back to nodes
         </Link>
-        <h1 className="text-2xl font-bold">{node.name}</h1>
+        <h1 className="text-2xl font-bold">{getNodeDisplayName(node)}</h1>
+        <p className="text-base-content/60 text-sm">Address: {node.address}</p>
       </div>
 
       {/* Stats */}
@@ -123,7 +140,11 @@ export default function NodeDetail() {
                 <tbody>
                   <tr>
                     <td className="font-medium w-36">Address</td>
-                    <td>{node.address}</td>
+                    <td className="font-mono">{node.address}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-medium">Display Name</td>
+                    <td>{node.name || <span className="text-base-content/60">Not set</span>}</td>
                   </tr>
                   <tr>
                     <td className="font-medium">Signal Quality</td>

@@ -3,11 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchNodes } from '../api/client';
 import NodeTable from '../components/NodeTable';
 
-type SortKey = 'name' | 'status' | 'rssi' | 'last_seen';
+type SortKey = 'name' | 'address' | 'status' | 'rssi' | 'last_seen';
 type FilterStatus = 'all' | 'online' | 'offline';
 
 export default function Nodes() {
-  const [sortBy, setSortBy] = useState<SortKey>('name');
+  const [sortBy, setSortBy] = useState<SortKey>('address');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
 
   const { data: nodes, isLoading, error } = useQuery({
@@ -50,7 +50,9 @@ export default function Nodes() {
   const sortedNodes = [...filteredNodes].sort((a, b) => {
     switch (sortBy) {
       case 'name':
-        return a.name.localeCompare(b.name);
+        return (a.name || `Node ${a.address}`).localeCompare(b.name || `Node ${b.address}`);
+      case 'address':
+        return a.address - b.address;
       case 'status':
         return (b.online ? 1 : 0) - (a.online ? 1 : 0);
       case 'rssi':
@@ -99,6 +101,7 @@ export default function Nodes() {
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortKey)}
               >
+                <option value="address">Address</option>
                 <option value="name">Name</option>
                 <option value="status">Status</option>
                 <option value="rssi">Signal Strength</option>

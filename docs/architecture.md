@@ -10,6 +10,7 @@ LoRa Node Manager is a Home Assistant Supervisor add-on that provides a manageme
 2. **Supervisor-native** — Uses HA's ingress system for auth and sidebar integration
 3. **Standalone web app** — FastAPI + React, no HA frontend framework dependencies
 4. **Single gateway** — Point-to-point star topology, one ESP32 gateway
+5. **Address-based identification** — Nodes identified by LoRa address, not names
 
 ## Component Diagram
 
@@ -39,6 +40,7 @@ LoRa Node Manager is a Home Assistant Supervisor add-on that provides a manageme
          ┌────────┐    ┌────────┐    ┌────────┐
          │ Node 1 │    │ Node 2 │    │ Node N │
          │RYLR998 │    │RYLR998 │    │RYLR998 │
+         │addr: 5 │    │addr: 12│    │addr: N │
          └────────┘    └────────┘    └────────┘
 ```
 
@@ -94,18 +96,26 @@ schema:
 
 ## Data Flow
 
-### MQTT Topics
+### Address-Based MQTT Topics
 
-The ESP32 gateway publishes to these topics:
+Topics use the node's LoRa address as the identifier. This keeps the gateway simple (no name configuration needed) and allows display names to be changed without affecting MQTT routing.
 
 ```
-lora/{node_name}/state      # Decoded telemetry JSON
-lora/{node_name}/online     # "online" or "offline"
-lora/{node_name}/rssi       # Last received RSSI
-lora/{node_name}/snr        # Last received SNR
-lora/{node_name}/last_seen  # Unix timestamp
-lora/{node_name}/gap_count  # Missed sequence numbers
-lora/gateway/status         # Gateway health
+lora/{address}/state      # Decoded telemetry JSON
+lora/{address}/online     # "online" or "offline"
+lora/{address}/rssi       # Last received RSSI
+lora/{address}/snr        # Last received SNR
+lora/{address}/last_seen  # Unix timestamp
+lora/{address}/gap_count  # Missed sequence numbers
+lora/{address}/command    # Commands TO the node
+lora/gateway/status       # Gateway health
+```
+
+Example for node at address 5 (display name: "Chicken Coop"):
+```
+lora/5/state
+lora/5/online
+lora/5/command
 ```
 
 ### Frame Format
@@ -119,7 +129,7 @@ LoRa frames use a packed binary format, hex-encoded for the AT interface:
 └──────────┴──────────┴─────────────────────┘
 ```
 
-The gateway decodes these and publishes human-readable JSON to MQTT.
+The gateway decodes these and publishes human-readable JSON to MQTT using the source address as the topic path.
 
 ## Backend Architecture
 
@@ -138,13 +148,13 @@ backend/
 ### State Management
 
 ```python
-# In-memory node state cache
-nodes: dict[str, NodeState] = {}
+# In-memory node state cache (keyed by address)
+nodes: dict[int, NodeState] = {}
 
 # Updated on MQTT messages
 class NodeState:
-    name: str
-    address: int
+    address: int        # Primary key, used in MQTT topics
+    name: str           # Display name (e.g., "Chicken Coop"), can be empty
     online: bool
     last_seen: datetime
     rssi: int
@@ -154,33 +164,70 @@ class NodeState:
     gap_count: int
 ```
 
+Auto-discovered nodes (from MQTT) get an empty name and display as "Node {address}" until renamed.
+
+### Display Name Helper
+
+```python
+def get_node_display_name(node: NodeState) -> str:
+    return node.name if node.name else f"Node {node.address}"
+```
+
 ### Persistence
 
 SQLite stores:
-- Node configuration (name, address, type, calibration)
+- Node configuration (address as primary key, display name, type, calibration)
 - RSSI/SNR history (ring buffer, 24 hours)
 - User preferences
 
 ## Frontend Architecture
 
+### Tech Stack
+
+- **React 18** with TypeScript
+- **TailwindCSS** for utility-first styling
+- **DaisyUI** for component library and theming
+- **React Router** for navigation
+- **TanStack Query** for data fetching
+
 ### React Application
 
 ```
 frontend/src/
-├── App.tsx               # Router, layout
+├── App.tsx               # Router, DaisyUI drawer layout
+├── main.tsx              # Entry point, providers
+├── index.css             # Tailwind directives
+├── types.ts              # TypeScript interfaces, getNodeDisplayName()
 ├── api/
 │   └── client.ts         # Fetch wrapper, WebSocket hook
+├── context/
+│   └── ThemeContext.tsx  # Light/dark theme management
 ├── pages/
-│   ├── Inventory.tsx     # Node table
-│   ├── NodeDetail.tsx    # Single node view
-│   ├── AddNode.tsx       # Provisioning wizard
-│   ├── Logs.tsx          # Live log stream
-│   └── Gateway.tsx       # Gateway health
+│   ├── Dashboard.tsx     # Overview stats and alerts
+│   ├── Nodes.tsx         # Node list with filters
+│   ├── NodeDetail.tsx    # Single node view (by address)
+│   ├── Network.tsx       # Signal strength visualization
+│   ├── Commands.tsx      # Send commands to nodes
+│   ├── Logs.tsx          # Log viewer with filters
+│   └── Settings.tsx      # MQTT config and theme settings
 └── components/
-    ├── NodeTable.tsx
-    ├── RssiChart.tsx
-    └── TelemetryCard.tsx
+    ├── NodeTable.tsx     # Reusable node list table
+    └── CreateNodeModal.tsx  # Node registration modal
 ```
+
+### Routing
+
+Routes use address as the identifier:
+- `/nodes` - Node list
+- `/nodes/:address` - Node detail page (e.g., `/nodes/5`)
+
+### Theming
+
+The app supports light and dark themes via DaisyUI:
+- Theme preference stored in localStorage
+- Respects system preference on first visit
+- Toggle in header and Settings page
+- Applied via `data-theme` attribute on `<html>`
 
 ### Ingress Path Handling
 

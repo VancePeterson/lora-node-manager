@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { fetchNodes, fetchGateway } from '../api/client';
+import { getNodeDisplayName } from '../types';
 
 export default function Dashboard() {
   const { data: nodes } = useQuery({
@@ -90,15 +91,15 @@ export default function Dashboard() {
             ) : (
               <ul className="space-y-3">
                 {offlineNodes.map((node) => (
-                  <li key={node.name} className="flex items-start gap-3">
+                  <li key={node.address} className="flex items-start gap-3">
                     <span className="w-2 h-2 rounded-full bg-error mt-1.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm">
                         <Link
-                          to={`/nodes/${encodeURIComponent(node.name)}`}
+                          to={`/nodes/${node.address}`}
                           className="link link-primary"
                         >
-                          {node.name}
+                          {getNodeDisplayName(node)}
                         </Link>{' '}
                         is offline
                       </div>
@@ -111,15 +112,15 @@ export default function Dashboard() {
                   </li>
                 ))}
                 {weakSignalNodes.map((node) => (
-                  <li key={`weak-${node.name}`} className="flex items-start gap-3">
+                  <li key={`weak-${node.address}`} className="flex items-start gap-3">
                     <span className="w-2 h-2 rounded-full bg-warning mt-1.5 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm">
                         <Link
-                          to={`/nodes/${encodeURIComponent(node.name)}`}
+                          to={`/nodes/${node.address}`}
                           className="link link-primary"
                         >
-                          {node.name}
+                          {getNodeDisplayName(node)}
                         </Link>{' '}
                         has weak signal ({node.rssi} dBm)
                       </div>
@@ -142,6 +143,7 @@ export default function Dashboard() {
                 <thead>
                   <tr>
                     <th>Name</th>
+                    <th>Address</th>
                     <th>Status</th>
                     <th>RSSI</th>
                     <th>Last Seen</th>
@@ -149,15 +151,16 @@ export default function Dashboard() {
                 </thead>
                 <tbody>
                   {nodes.slice(0, 5).map((node) => (
-                    <tr key={node.name}>
+                    <tr key={node.address}>
                       <td>
                         <Link
-                          to={`/nodes/${encodeURIComponent(node.name)}`}
+                          to={`/nodes/${node.address}`}
                           className="link link-primary"
                         >
-                          {node.name}
+                          {getNodeDisplayName(node)}
                         </Link>
                       </td>
+                      <td className="font-mono text-sm">{node.address}</td>
                       <td>
                         <span className={`badge badge-sm ${node.online ? 'badge-success' : 'badge-error'}`}>
                           {node.online ? 'Online' : 'Offline'}

@@ -1,11 +1,11 @@
 import asyncio
-import json
 import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from db import (
+    add_log,
     get_app_settings,
     get_log_categories,
     get_logs,
@@ -15,6 +15,8 @@ from db import (
 )
 from models import (
     AppSettings,
+    CommandRequest,
+    CommandResponse,
     GatewayStatus,
     LogEntry,
     MqttStatus,
@@ -24,6 +26,7 @@ from models import (
 )
 from mqtt_client import (
     gateway_status,
+    get_node_display_name,
     mqtt_client,
     nodes,
     register_update_callback,
@@ -42,37 +45,85 @@ async def list_nodes() -> list[NodeState]:
 
 @router.post("/nodes", response_model=NodeState)
 async def create_node(config: NodeConfig) -> NodeState:
-    if config.name in nodes:
-        raise HTTPException(status_code=400, detail="Node already exists")
+    if config.address in nodes:
+        raise HTTPException(status_code=400, detail="Node with this address already exists")
 
     # Save to database
     await upsert_node_config(config)
 
     # Add to in-memory state
     node = NodeState(
-        name=config.name,
         address=config.address,
+        name=config.name,
     )
-    nodes[config.name] = node
+    nodes[config.address] = node
     return node
 
 
-@router.get("/nodes/{name}", response_model=NodeState)
-async def get_node(name: str) -> NodeState:
-    if name not in nodes:
+@router.get("/nodes/{address}", response_model=NodeState)
+async def get_node(address: int) -> NodeState:
+    if address not in nodes:
         raise HTTPException(status_code=404, detail="Node not found")
-    return nodes[name]
+    return nodes[address]
 
 
-@router.get("/nodes/{name}/history", response_model=list[RssiHistoryEntry])
+@router.put("/nodes/{address}", response_model=NodeState)
+async def update_node(address: int, config: NodeConfig) -> NodeState:
+    """Update a node's display name and description."""
+    if address not in nodes:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    # Update database
+    await upsert_node_config(config)
+
+    # Update in-memory state
+    node = nodes[address]
+    node.name = config.name
+    return node
+
+
+@router.get("/nodes/{address}/history", response_model=list[RssiHistoryEntry])
 async def get_node_history(
-    name: str,
+    address: int,
     hours: int = Query(default=24, ge=1, le=168),
     limit: int = Query(default=1000, ge=1, le=10000),
 ) -> list[RssiHistoryEntry]:
-    if name not in nodes:
+    if address not in nodes:
         raise HTTPException(status_code=404, detail="Node not found")
-    return await get_rssi_history(name, hours=hours, limit=limit)
+    return await get_rssi_history(address, hours=hours, limit=limit)
+
+
+@router.post("/nodes/{address}/command", response_model=CommandResponse)
+async def send_node_command(address: int, request: CommandRequest) -> CommandResponse:
+    """Send a command to a specific node via MQTT."""
+    if address not in nodes:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    node = nodes[address]
+    settings = await get_app_settings()
+    # Use address in MQTT topic: lora/{address}/command
+    topic = f"{settings.mqtt_topic_prefix}/{address}/command"
+
+    try:
+        await mqtt_client.publish(topic, request.command)
+        await add_log(
+            f"Sent command to {get_node_display_name(node)}: {request.command}",
+            level="info",
+            category="command",
+            node_address=address,
+            details={"command": request.command, "topic": topic},
+        )
+        return CommandResponse(
+            success=True,
+            address=address,
+            command=request.command,
+            topic=topic,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to send command to address {address}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send command: {e}")
 
 
 @router.get("/gateway", response_model=GatewayStatus)
@@ -99,14 +150,14 @@ async def get_mqtt_status() -> MqttStatus:
 
 @router.get("/logs", response_model=list[LogEntry])
 async def list_logs(
-    node_name: str | None = Query(default=None),
+    node_address: int | None = Query(default=None),
     level: str | None = Query(default=None),
     category: str | None = Query(default=None),
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ) -> list[LogEntry]:
     return await get_logs(
-        node_name=node_name,
+        node_address=node_address,
         level=level,
         category=category,
         limit=limit,
@@ -134,11 +185,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     register_update_callback(on_update)
 
     try:
-        # Send initial state
+        # Send initial state - keyed by address
         await websocket.send_json({
             "type": "initial_state",
             "payload": {
-                "nodes": {name: node.model_dump(mode="json") for name, node in nodes.items()},
+                "nodes": {str(addr): node.model_dump(mode="json") for addr, node in nodes.items()},
                 "gateway": gateway_status.model_dump(mode="json"),
             },
         })

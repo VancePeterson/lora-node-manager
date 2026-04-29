@@ -22,11 +22,11 @@ export default function CreateNodeModal({ onClose }: CreateNodeModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name.trim() || !address.trim()) return;
+    if (!address.trim()) return;
 
     mutation.mutate({
-      name: name.trim(),
       address: parseInt(address, 10),
+      name: name.trim() || undefined,
     });
   };
 
@@ -45,37 +45,49 @@ export default function CreateNodeModal({ onClose }: CreateNodeModalProps) {
         >
           ✕
         </button>
-        <h3 className="font-bold text-lg">Create Node</h3>
+        <h3 className="font-bold text-lg">Register Node</h3>
+        <p className="text-sm text-base-content/60 mt-1">
+          Pre-register a node by address. MQTT topic: lora/&#123;address&#125;/*
+        </p>
 
         <form onSubmit={handleSubmit} className="mt-4">
           <div className="form-control">
             <label className="label">
-              <span className="label-text">Node Name</span>
-            </label>
-            <input
-              type="text"
-              className="input input-bordered w-full"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., sensor-kitchen"
-              required
-            />
-          </div>
-
-          <div className="form-control mt-4">
-            <label className="label">
-              <span className="label-text">Address</span>
+              <span className="label-text">Address (required)</span>
             </label>
             <input
               type="number"
               className="input input-bordered w-full"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="e.g., 1"
+              placeholder="e.g., 5"
               min="0"
               max="65535"
               required
             />
+            <label className="label">
+              <span className="label-text-alt text-base-content/60">
+                The LoRa address configured on the node
+              </span>
+            </label>
+          </div>
+
+          <div className="form-control mt-4">
+            <label className="label">
+              <span className="label-text">Display Name (optional)</span>
+            </label>
+            <input
+              type="text"
+              className="input input-bordered w-full"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Chicken Coop"
+            />
+            <label className="label">
+              <span className="label-text-alt text-base-content/60">
+                Friendly name shown in the UI. Defaults to "Node &#123;address&#125;"
+              </span>
+            </label>
           </div>
 
           {mutation.isError && (
@@ -91,15 +103,15 @@ export default function CreateNodeModal({ onClose }: CreateNodeModalProps) {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={mutation.isPending || !name.trim() || !address.trim()}
+              disabled={mutation.isPending || !address.trim()}
             >
               {mutation.isPending ? (
                 <>
                   <span className="loading loading-spinner loading-sm"></span>
-                  Creating...
+                  Registering...
                 </>
               ) : (
-                'Create Node'
+                'Register Node'
               )}
             </button>
           </div>

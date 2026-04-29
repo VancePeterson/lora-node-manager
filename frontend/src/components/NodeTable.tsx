@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { NodeState } from '../types';
+import { getNodeDisplayName } from '../types';
 
 interface NodeTableProps {
   nodes: NodeState[];
@@ -40,6 +41,7 @@ export default function NodeTable({ nodes }: NodeTableProps) {
         <thead>
           <tr>
             <th>Name</th>
+            <th>Address</th>
             <th>Status</th>
             <th>RSSI</th>
             <th>SNR</th>
@@ -48,15 +50,16 @@ export default function NodeTable({ nodes }: NodeTableProps) {
         </thead>
         <tbody>
           {nodes.map((node) => (
-            <tr key={node.name}>
+            <tr key={node.address}>
               <td>
                 <Link
-                  to={`/nodes/${encodeURIComponent(node.name)}`}
+                  to={`/nodes/${node.address}`}
                   className="link link-primary"
                 >
-                  {node.name}
+                  {getNodeDisplayName(node)}
                 </Link>
               </td>
+              <td className="font-mono text-sm">{node.address}</td>
               <td>
                 <span className={`badge badge-sm ${node.online ? 'badge-success' : 'badge-error'}`}>
                   {node.online ? 'Online' : 'Offline'}

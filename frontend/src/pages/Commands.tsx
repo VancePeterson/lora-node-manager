@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { fetchNodes } from '../api/client';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { fetchNodes, sendCommand } from '../api/client';
+import { getNodeDisplayName } from '../types';
 
 interface CommandHistoryEntry {
   id: number;
   timestamp: Date;
-  target: string;
+  target: string;  // Display name or "Broadcast"
+  targetAddress: number | null;  // null for broadcast
   command: string;
   status: 'sent' | 'pending' | 'failed';
+  error?: string;
 }
 
 export default function Commands() {
-  const [targetNode, setTargetNode] = useState<string>('');
+  const [targetAddress, setTargetAddress] = useState<string>('');
   const [command, setCommand] = useState<string>('');
   const [commandHistory, setCommandHistory] = useState<CommandHistoryEntry[]>([]);
 
@@ -21,28 +24,60 @@ export default function Commands() {
     refetchInterval: 5000,
   });
 
-  const handleSendCommand = (e: React.FormEvent) => {
+  const sendMutation = useMutation({
+    mutationFn: async ({ address, cmd }: { address: number | 'broadcast'; cmd: string }) => {
+      // If broadcast, send to all online nodes
+      if (address === 'broadcast') {
+        const onlineNodes = nodes?.filter((n) => n.online) ?? [];
+        const results = await Promise.allSettled(
+          onlineNodes.map((node) => sendCommand(node.address, cmd))
+        );
+        return { broadcast: true, results, nodeCount: onlineNodes.length };
+      }
+      return sendCommand(address, cmd);
+    },
+  });
+
+  const handleSendCommand = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!targetNode || !command.trim()) return;
+    if (!targetAddress || !command.trim()) return;
 
+    const isBroadcast = targetAddress === 'broadcast';
+    const address = isBroadcast ? null : parseInt(targetAddress, 10);
+    const targetNode = address !== null ? nodes?.find((n) => n.address === address) : null;
+
+    const entryId = Date.now();
     const entry: CommandHistoryEntry = {
-      id: Date.now(),
+      id: entryId,
       timestamp: new Date(),
-      target: targetNode,
+      target: isBroadcast ? 'Broadcast (all online)' : (targetNode ? getNodeDisplayName(targetNode) : `Address ${address}`),
+      targetAddress: address,
       command: command.trim(),
       status: 'pending',
     };
 
     setCommandHistory((prev) => [entry, ...prev]);
+    const cmdToSend = command.trim();
     setCommand('');
 
-    // TODO: Actually send command via API
-    setTimeout(() => {
+    try {
+      await sendMutation.mutateAsync({
+        address: isBroadcast ? 'broadcast' : address!,
+        cmd: cmdToSend,
+      });
       setCommandHistory((prev) =>
-        prev.map((h) => (h.id === entry.id ? { ...h, status: 'sent' as const } : h))
+        prev.map((h) => (h.id === entryId ? { ...h, status: 'sent' as const } : h))
       );
-    }, 500);
+    } catch (err) {
+      setCommandHistory((prev) =>
+        prev.map((h) =>
+          h.id === entryId
+            ? { ...h, status: 'failed' as const, error: (err as Error).message }
+            : h
+        )
+      );
+    }
   };
 
   const presetCommands = [
@@ -78,14 +113,14 @@ export default function Commands() {
               </label>
               <select
                 className="select select-bordered w-full"
-                value={targetNode}
-                onChange={(e) => setTargetNode(e.target.value)}
+                value={targetAddress}
+                onChange={(e) => setTargetAddress(e.target.value)}
               >
                 <option value="">Select a node...</option>
-                <option value="broadcast">Broadcast (all nodes)</option>
+                <option value="broadcast">Broadcast (all online nodes)</option>
                 {nodes?.map((node) => (
-                  <option key={node.name} value={node.name}>
-                    {node.name} {node.online ? '(online)' : '(offline)'}
+                  <option key={node.address} value={node.address.toString()}>
+                    {getNodeDisplayName(node)} (addr: {node.address}) {node.online ? '' : '- offline'}
                   </option>
                 ))}
               </select>
@@ -120,9 +155,16 @@ export default function Commands() {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={!targetNode || !command.trim()}
+              disabled={!targetAddress || !command.trim() || sendMutation.isPending}
             >
-              Send Command
+              {sendMutation.isPending ? (
+                <>
+                  <span className="loading loading-spinner loading-sm"></span>
+                  Sending...
+                </>
+              ) : (
+                'Send Command'
+              )}
             </button>
           </form>
         </div>
@@ -158,13 +200,23 @@ export default function Commands() {
                         </code>
                       </td>
                       <td>
-                        <span className={`${getStatusBadge(entry.status)} badge-sm`}>
-                          {entry.status === 'sent'
-                            ? 'Sent'
-                            : entry.status === 'failed'
-                            ? 'Failed'
-                            : 'Pending'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`${getStatusBadge(entry.status)} badge-sm`}>
+                            {entry.status === 'sent'
+                              ? 'Sent'
+                              : entry.status === 'failed'
+                              ? 'Failed'
+                              : 'Pending'}
+                          </span>
+                          {entry.error && (
+                            <span
+                              className="text-error text-xs truncate max-w-32"
+                              title={entry.error}
+                            >
+                              {entry.error}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

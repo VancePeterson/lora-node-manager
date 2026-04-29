@@ -1,6 +1,6 @@
 export interface NodeState {
-  name: string;
-  address: number;
+  address: number;  // Primary identifier, used in MQTT topics
+  name: string;     // Display name (can be empty for auto-discovered nodes)
   online: boolean;
   last_seen: string | null;
   rssi: number | null;
@@ -30,7 +30,7 @@ export interface WebSocketMessage {
 }
 
 export interface InitialStatePayload {
-  nodes: Record<string, NodeState>;
+  nodes: Record<string, NodeState>;  // Keyed by address (as string)
   gateway: GatewayStatus;
 }
 
@@ -54,7 +54,12 @@ export interface LogEntry {
   timestamp: string;
   level: string;
   category: string;
-  node_name: string | null;
+  node_address: number | null;  // Node address for node-related logs
   message: string;
   details: Record<string, unknown> | null;
+}
+
+// Helper to get display name for a node
+export function getNodeDisplayName(node: NodeState): string {
+  return node.name || `Node ${node.address}`;
 }

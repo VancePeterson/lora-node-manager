@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 
 
 class NodeState(BaseModel):
-    name: str
-    address: int
+    address: int  # Primary identifier, used in MQTT topics (e.g., lora/5/state)
+    name: str = ""  # Display name (e.g., "Chicken Coop"), can be empty for undiscovered nodes
     online: bool = False
     last_seen: datetime | None = None
     rssi: int | None = None
@@ -17,8 +17,8 @@ class NodeState(BaseModel):
 
 
 class NodeConfig(BaseModel):
-    name: str
-    address: int
+    address: int  # Primary identifier
+    name: str = ""  # Display name
     description: str = ""
 
 
@@ -71,14 +71,26 @@ class LogEntry(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     level: str = "info"  # info, warning, error
     category: str = "system"  # system, mqtt, node, command
-    node_name: str | None = None
+    node_address: int | None = None  # Node address for node-related logs
     message: str
     details: dict[str, Any] | None = None
 
 
 class LogFilter(BaseModel):
-    node_name: str | None = None
+    node_address: int | None = None
     level: str | None = None
     category: str | None = None
     limit: int = 100
     offset: int = 0
+
+
+class CommandRequest(BaseModel):
+    command: str
+
+
+class CommandResponse(BaseModel):
+    success: bool
+    address: int
+    command: str
+    topic: str
+    message: str | None = None

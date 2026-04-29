@@ -25,8 +25,8 @@ export async function fetchNodes(): Promise<NodeState[]> {
 }
 
 export interface CreateNodeRequest {
-  name: string;
   address: number;
+  name?: string;
 }
 
 export async function createNode(node: CreateNodeRequest): Promise<NodeState> {
@@ -42,17 +42,31 @@ export async function createNode(node: CreateNodeRequest): Promise<NodeState> {
   return response.json();
 }
 
-export async function fetchNode(name: string): Promise<NodeState> {
-  return fetchJson<NodeState>(`/nodes/${encodeURIComponent(name)}`);
+export async function fetchNode(address: number): Promise<NodeState> {
+  return fetchJson<NodeState>(`/nodes/${address}`);
+}
+
+export async function updateNode(
+  address: number,
+  data: { name: string; description?: string }
+): Promise<NodeState> {
+  const response = await fetch(`${API_BASE}/nodes/${address}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address, ...data }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+  }
+  return response.json();
 }
 
 export async function fetchNodeHistory(
-  name: string,
+  address: number,
   hours = 24
 ): Promise<RssiHistoryEntry[]> {
-  return fetchJson<RssiHistoryEntry[]>(
-    `/nodes/${encodeURIComponent(name)}/history?hours=${hours}`
-  );
+  return fetchJson<RssiHistoryEntry[]>(`/nodes/${address}/history?hours=${hours}`);
 }
 
 export async function fetchGateway(): Promise<GatewayStatus> {
@@ -80,7 +94,7 @@ export async function fetchMqttStatus(): Promise<MqttStatus> {
 }
 
 export interface LogFilter {
-  node_name?: string;
+  node_address?: number;
   level?: string;
   category?: string;
   limit?: number;
@@ -89,7 +103,7 @@ export interface LogFilter {
 
 export async function fetchLogs(filter: LogFilter = {}): Promise<LogEntry[]> {
   const params = new URLSearchParams();
-  if (filter.node_name) params.set('node_name', filter.node_name);
+  if (filter.node_address !== undefined) params.set('node_address', filter.node_address.toString());
   if (filter.level) params.set('level', filter.level);
   if (filter.category) params.set('category', filter.category);
   if (filter.limit) params.set('limit', filter.limit.toString());
@@ -101,6 +115,30 @@ export async function fetchLogs(filter: LogFilter = {}): Promise<LogEntry[]> {
 
 export async function fetchLogCategories(): Promise<string[]> {
   return fetchJson<string[]>('/logs/categories');
+}
+
+export interface CommandResponse {
+  success: boolean;
+  address: number;
+  command: string;
+  topic: string;
+  message?: string;
+}
+
+export async function sendCommand(
+  address: number,
+  command: string
+): Promise<CommandResponse> {
+  const response = await fetch(`${API_BASE}/nodes/${address}/command`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || `HTTP ${response.status}: ${response.statusText}`);
+  }
+  return response.json();
 }
 
 export interface UseWebSocketOptions {

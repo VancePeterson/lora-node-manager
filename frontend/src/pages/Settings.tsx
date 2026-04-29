@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchNodes, fetchSettings, fetchMqttStatus, updateSettings } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
+import { getNodeDisplayName } from '../types';
 import type { AppSettings } from '../types';
 
 export default function Settings() {
@@ -252,16 +253,20 @@ export default function Settings() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Name</th>
                     <th>Address</th>
+                    <th>Display Name</th>
+                    <th>MQTT Topic</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {nodes.map((node) => (
-                    <tr key={node.name}>
-                      <td>{node.name}</td>
-                      <td>{node.address}</td>
+                    <tr key={node.address}>
+                      <td className="font-mono">{node.address}</td>
+                      <td>{getNodeDisplayName(node)}</td>
+                      <td className="font-mono text-sm text-base-content/60">
+                        lora/{node.address}/*
+                      </td>
                       <td>
                         <button className="btn btn-ghost btn-xs">Edit</button>
                       </td>
