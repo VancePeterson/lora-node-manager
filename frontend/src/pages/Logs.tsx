@@ -27,27 +27,27 @@ export default function Logs() {
     refetchInterval: 5000,
   });
 
-  const getLevelBadgeStyle = (level: string) => {
+  const getLevelBadge = (level: string) => {
     switch (level) {
       case 'error':
-        return { background: '#fee2e2', color: '#991b1b' };
+        return 'badge badge-error';
       case 'warning':
-        return { background: '#fef3c7', color: '#92400e' };
+        return 'badge badge-warning';
       default:
-        return { background: '#e0e7ff', color: '#3730a3' };
+        return 'badge badge-info';
     }
   };
 
-  const getCategoryBadgeStyle = (category: string) => {
+  const getCategoryBadge = (category: string) => {
     switch (category) {
       case 'mqtt':
-        return { background: '#dbeafe', color: '#1e40af' };
+        return 'badge badge-primary badge-outline';
       case 'node':
-        return { background: '#dcfce7', color: '#166534' };
+        return 'badge badge-success badge-outline';
       case 'command':
-        return { background: '#fae8ff', color: '#86198f' };
+        return 'badge badge-secondary badge-outline';
       default:
-        return { background: '#f3f4f6', color: '#374151' };
+        return 'badge badge-ghost';
     }
   };
 
@@ -65,106 +65,124 @@ export default function Logs() {
   const hasFilters = nodeFilter || levelFilter || categoryFilter;
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>Logs</h1>
-      </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Logs</h1>
 
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="filter-node">Node</label>
-            <select
-              id="filter-node"
-              value={nodeFilter}
-              onChange={(e) => setNodeFilter(e.target.value)}
-            >
-              <option value="">All nodes</option>
-              {nodes?.map((node) => (
-                <option key={node.name} value={node.name}>
-                  {node.name}
-                </option>
-              ))}
-            </select>
+      {/* Filters */}
+      <div className="card bg-base-100 shadow-sm">
+        <div className="card-body py-4">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="form-control w-full sm:w-auto">
+              <label className="label py-1">
+                <span className="label-text">Node</span>
+              </label>
+              <select
+                className="select select-bordered select-sm w-full sm:w-40"
+                value={nodeFilter}
+                onChange={(e) => setNodeFilter(e.target.value)}
+              >
+                <option value="">All nodes</option>
+                {nodes?.map((node) => (
+                  <option key={node.name} value={node.name}>
+                    {node.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-control w-full sm:w-auto">
+              <label className="label py-1">
+                <span className="label-text">Level</span>
+              </label>
+              <select
+                className="select select-bordered select-sm w-full sm:w-32"
+                value={levelFilter}
+                onChange={(e) => setLevelFilter(e.target.value as LogLevel)}
+              >
+                <option value="">All levels</option>
+                <option value="info">Info</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
+              </select>
+            </div>
+
+            <div className="form-control w-full sm:w-auto">
+              <label className="label py-1">
+                <span className="label-text">Category</span>
+              </label>
+              <select
+                className="select select-bordered select-sm w-full sm:w-36"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value as LogCategory)}
+              >
+                <option value="">All categories</option>
+                <option value="system">System</option>
+                <option value="mqtt">MQTT</option>
+                <option value="node">Node</option>
+                <option value="command">Command</option>
+              </select>
+            </div>
+
+            {hasFilters && (
+              <button className="btn btn-ghost btn-sm" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
           </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="filter-level">Level</label>
-            <select
-              id="filter-level"
-              value={levelFilter}
-              onChange={(e) => setLevelFilter(e.target.value as LogLevel)}
-            >
-              <option value="">All levels</option>
-              <option value="info">Info</option>
-              <option value="warning">Warning</option>
-              <option value="error">Error</option>
-            </select>
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="filter-category">Category</label>
-            <select
-              id="filter-category"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as LogCategory)}
-            >
-              <option value="">All categories</option>
-              <option value="system">System</option>
-              <option value="mqtt">MQTT</option>
-              <option value="node">Node</option>
-              <option value="command">Command</option>
-            </select>
-          </div>
-
-          {hasFilters && (
-            <button className="btn btn-secondary" onClick={clearFilters}>
-              Clear filters
-            </button>
-          )}
         </div>
       </div>
 
-      <div className="card">
-        {isLoading ? (
-          <p>Loading logs...</p>
-        ) : logs && logs.length > 0 ? (
-          <div className="log-list">
-            {logs.map((log) => (
-              <div key={log.id} className="log-entry">
-                <div className="log-header">
-                  <span className="log-timestamp">{formatTimestamp(log.timestamp)}</span>
-                  <span
-                    className="log-badge"
-                    style={getLevelBadgeStyle(log.level)}
-                  >
-                    {log.level}
-                  </span>
-                  <span
-                    className="log-badge"
-                    style={getCategoryBadgeStyle(log.category)}
-                  >
-                    {log.category}
-                  </span>
-                  {log.node_name && (
-                    <span className="log-node">{log.node_name}</span>
+      {/* Log Entries */}
+      <div className="card bg-base-100 shadow-sm">
+        <div className="card-body">
+          {isLoading ? (
+            <div className="flex items-center gap-3">
+              <span className="loading loading-spinner loading-md"></span>
+              <span>Loading logs...</span>
+            </div>
+          ) : logs && logs.length > 0 ? (
+            <div className="space-y-3">
+              {logs.map((log) => (
+                <div
+                  key={log.id}
+                  className="p-3 border border-base-300 rounded-lg bg-base-50"
+                >
+                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <span className="text-xs text-base-content/60 font-mono">
+                      {formatTimestamp(log.timestamp)}
+                    </span>
+                    <span className={`${getLevelBadge(log.level)} badge-xs uppercase`}>
+                      {log.level}
+                    </span>
+                    <span className={`${getCategoryBadge(log.category)} badge-xs`}>
+                      {log.category}
+                    </span>
+                    {log.node_name && (
+                      <span className="badge badge-ghost badge-xs">
+                        {log.node_name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm">{log.message}</div>
+                  {log.details && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-base-content/60 cursor-pointer hover:text-base-content">
+                        Details
+                      </summary>
+                      <pre className="mt-2 p-2 bg-base-200 rounded text-xs overflow-x-auto">
+                        {JSON.stringify(log.details, null, 2)}
+                      </pre>
+                    </details>
                   )}
                 </div>
-                <div className="log-message">{log.message}</div>
-                {log.details && (
-                  <details className="log-details">
-                    <summary>Details</summary>
-                    <pre>{JSON.stringify(log.details, null, 2)}</pre>
-                  </details>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <p>No logs found</p>
-          </div>
-        )}
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-base-content/60">
+              <p>No logs found</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

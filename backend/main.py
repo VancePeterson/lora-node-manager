@@ -30,7 +30,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         nodes[config.name] = NodeState(
             name=config.name,
             address=config.address,
-            node_type=config.node_type,
         )
     logger.info(f"Loaded {len(saved_nodes)} nodes from database")
 

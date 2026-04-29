@@ -37,48 +37,55 @@ export default function CreateNodeModal({ onClose }: CreateNodeModalProps) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={handleBackdropClick}>
-      <div className="modal">
-        <div className="modal-header">
-          <h2>Create Node</h2>
-          <button className="modal-close" onClick={onClose}>
-            &times;
-          </button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <div className="form-group">
-              <label htmlFor="node-name">Node Name</label>
-              <input
-                type="text"
-                id="node-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., sensor-kitchen"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="node-address">Address</label>
-              <input
-                type="number"
-                id="node-address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                placeholder="e.g., 1"
-                min="0"
-                max="65535"
-                required
-              />
-            </div>
-            {mutation.isError && (
-              <p style={{ color: '#dc2626', fontSize: '0.875rem', marginTop: '0.5rem' }}>
-                {(mutation.error as Error).message}
-              </p>
-            )}
+    <dialog className="modal modal-open" onClick={handleBackdropClick}>
+      <div className="modal-box">
+        <button
+          className="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+          onClick={onClose}
+        >
+          ✕
+        </button>
+        <h3 className="font-bold text-lg">Create Node</h3>
+
+        <form onSubmit={handleSubmit} className="mt-4">
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Node Name</span>
+            </label>
+            <input
+              type="text"
+              className="input input-bordered w-full"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., sensor-kitchen"
+              required
+            />
           </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+
+          <div className="form-control mt-4">
+            <label className="label">
+              <span className="label-text">Address</span>
+            </label>
+            <input
+              type="number"
+              className="input input-bordered w-full"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="e.g., 1"
+              min="0"
+              max="65535"
+              required
+            />
+          </div>
+
+          {mutation.isError && (
+            <div className="alert alert-error mt-4">
+              <span>{(mutation.error as Error).message}</span>
+            </div>
+          )}
+
+          <div className="modal-action">
+            <button type="button" className="btn btn-ghost" onClick={onClose}>
               Cancel
             </button>
             <button
@@ -86,11 +93,21 @@ export default function CreateNodeModal({ onClose }: CreateNodeModalProps) {
               className="btn btn-primary"
               disabled={mutation.isPending || !name.trim() || !address.trim()}
             >
-              {mutation.isPending ? 'Creating...' : 'Create Node'}
+              {mutation.isPending ? (
+                <>
+                  <span className="loading loading-spinner loading-sm"></span>
+                  Creating...
+                </>
+              ) : (
+                'Create Node'
+              )}
             </button>
           </div>
         </form>
       </div>
-    </div>
+      <form method="dialog" className="modal-backdrop">
+        <button onClick={onClose}>close</button>
+      </form>
+    </dialog>
   );
 }

@@ -145,7 +145,6 @@ nodes: dict[str, NodeState] = {}
 class NodeState:
     name: str
     address: int
-    node_type: str
     online: bool
     last_seen: datetime
     rssi: int

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchNodes } from '../api/client';
 import NodeTable from '../components/NodeTable';
-import type { NodeState } from '../types';
 
 type SortKey = 'name' | 'status' | 'rssi' | 'last_seen';
 type FilterStatus = 'all' | 'online' | 'offline';
@@ -19,23 +18,24 @@ export default function Nodes() {
 
   if (isLoading) {
     return (
-      <div>
-        <div className="page-header">
-          <h1>Nodes</h1>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Nodes</h1>
+        <div className="card bg-base-100 shadow-sm">
+          <div className="card-body">
+            <span className="loading loading-spinner loading-md"></span>
+            <p>Loading nodes...</p>
+          </div>
         </div>
-        <div className="card">Loading nodes...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div>
-        <div className="page-header">
-          <h1>Nodes</h1>
-        </div>
-        <div className="card">
-          <p>Error loading nodes: {(error as Error).message}</p>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Nodes</h1>
+        <div className="alert alert-error">
+          <span>Error loading nodes: {(error as Error).message}</span>
         </div>
       </div>
     );
@@ -69,43 +69,51 @@ export default function Nodes() {
   const offlineCount = (nodes ?? []).filter((n) => !n.online).length;
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>Nodes</h1>
-      </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Nodes</h1>
 
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="filter-status">Status</label>
-            <select
-              id="filter-status"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as FilterStatus)}
-            >
-              <option value="all">All ({nodes?.length ?? 0})</option>
-              <option value="online">Online ({onlineCount})</option>
-              <option value="offline">Offline ({offlineCount})</option>
-            </select>
-          </div>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="sort-by">Sort by</label>
-            <select
-              id="sort-by"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortKey)}
-            >
-              <option value="name">Name</option>
-              <option value="status">Status</option>
-              <option value="rssi">Signal Strength</option>
-              <option value="last_seen">Last Seen</option>
-            </select>
+      {/* Filters */}
+      <div className="card bg-base-100 shadow-sm">
+        <div className="card-body py-4">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="form-control w-full sm:w-auto">
+              <label className="label py-1">
+                <span className="label-text">Status</span>
+              </label>
+              <select
+                className="select select-bordered select-sm w-full sm:w-40"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as FilterStatus)}
+              >
+                <option value="all">All ({nodes?.length ?? 0})</option>
+                <option value="online">Online ({onlineCount})</option>
+                <option value="offline">Offline ({offlineCount})</option>
+              </select>
+            </div>
+            <div className="form-control w-full sm:w-auto">
+              <label className="label py-1">
+                <span className="label-text">Sort by</span>
+              </label>
+              <select
+                className="select select-bordered select-sm w-full sm:w-40"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortKey)}
+              >
+                <option value="name">Name</option>
+                <option value="status">Status</option>
+                <option value="rssi">Signal Strength</option>
+                <option value="last_seen">Last Seen</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="card">
-        <NodeTable nodes={sortedNodes} />
+      {/* Node Table */}
+      <div className="card bg-base-100 shadow-sm">
+        <div className="card-body">
+          <NodeTable nodes={sortedNodes} />
+        </div>
       </div>
     </div>
   );

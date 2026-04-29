@@ -52,7 +52,6 @@ async def create_node(config: NodeConfig) -> NodeState:
     node = NodeState(
         name=config.name,
         address=config.address,
-        node_type=config.node_type,
     )
     nodes[config.name] = node
     return node

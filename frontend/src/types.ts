@@ -1,7 +1,6 @@
 export interface NodeState {
   name: string;
   address: number;
-  node_type: string;
   online: boolean;
   last_seen: string | null;
   rssi: number | null;

@@ -20,149 +20,169 @@ export default function Dashboard() {
   const weakSignalNodes = nodes?.filter((n) => n.rssi !== null && n.rssi < -90) ?? [];
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>Dashboard</h1>
-      </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Dashboard</h1>
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="label">Gateway</div>
-          <div className={`value ${gateway?.online ? 'online' : 'offline'}`}>
+      {/* Stats */}
+      <div className="stats stats-vertical sm:stats-horizontal shadow w-full bg-base-100">
+        <div className="stat">
+          <div className="stat-title">Gateway</div>
+          <div className={`stat-value text-2xl ${gateway?.online ? 'text-success' : 'text-error'}`}>
             {gateway?.online ? 'Online' : 'Offline'}
           </div>
         </div>
-        <div className="stat-card">
-          <div className="label">Nodes Online</div>
-          <div className="value online">{onlineNodes.length}</div>
+        <div className="stat">
+          <div className="stat-title">Nodes Online</div>
+          <div className="stat-value text-2xl text-success">{onlineNodes.length}</div>
         </div>
-        <div className="stat-card">
-          <div className="label">Nodes Offline</div>
-          <div className="value offline">{offlineNodes.length}</div>
+        <div className="stat">
+          <div className="stat-title">Nodes Offline</div>
+          <div className="stat-value text-2xl text-error">{offlineNodes.length}</div>
         </div>
-        <div className="stat-card">
-          <div className="label">Weak Signal</div>
-          <div className={`value ${weakSignalNodes.length > 0 ? 'warning' : ''}`}>
+        <div className="stat">
+          <div className="stat-title">Weak Signal</div>
+          <div className={`stat-value text-2xl ${weakSignalNodes.length > 0 ? 'text-warning' : ''}`}>
             {weakSignalNodes.length}
           </div>
         </div>
       </div>
 
-      <div className="grid-2">
-        <div className="card">
-          <h2>Gateway Status</h2>
-          {gateway ? (
-            <div>
-              <p>
-                <strong>Status:</strong>{' '}
-                <span className={gateway.online ? 'status-online' : 'status-offline'}>
-                  {gateway.online ? 'Online' : 'Offline'}
-                </span>
-              </p>
-              {gateway.firmware_version && (
+      {/* Gateway and Alerts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="card bg-base-100 shadow-sm">
+          <div className="card-body">
+            <h2 className="card-title text-base">Gateway Status</h2>
+            {gateway ? (
+              <div className="space-y-2 text-sm">
                 <p>
-                  <strong>Firmware:</strong> {gateway.firmware_version}
+                  <span className="font-medium">Status:</span>{' '}
+                  <span className={gateway.online ? 'text-success' : 'text-error'}>
+                    {gateway.online ? 'Online' : 'Offline'}
+                  </span>
                 </p>
-              )}
-              {gateway.uptime_seconds !== null && (
+                {gateway.firmware_version && (
+                  <p>
+                    <span className="font-medium">Firmware:</span> {gateway.firmware_version}
+                  </p>
+                )}
+                {gateway.uptime_seconds !== null && (
+                  <p>
+                    <span className="font-medium">Uptime:</span> {formatUptime(gateway.uptime_seconds)}
+                  </p>
+                )}
                 <p>
-                  <strong>Uptime:</strong> {formatUptime(gateway.uptime_seconds)}
+                  <span className="font-medium">Messages:</span> {gateway.message_count}
                 </p>
-              )}
-              <p>
-                <strong>Messages:</strong> {gateway.message_count}
-              </p>
-            </div>
-          ) : (
-            <p className="empty-state">Loading gateway status...</p>
-          )}
+              </div>
+            ) : (
+              <p className="text-base-content/60">Loading gateway status...</p>
+            )}
+          </div>
         </div>
 
-        <div className="card">
-          <h2>Alerts</h2>
-          {offlineNodes.length === 0 && weakSignalNodes.length === 0 ? (
-            <div className="empty-state">
-              <p>No alerts</p>
-            </div>
-          ) : (
-            <ul className="activity-list">
-              {offlineNodes.map((node) => (
-                <li key={node.name} className="activity-item">
-                  <span className="activity-dot offline" />
-                  <div className="activity-content">
-                    <div className="activity-text">
-                      <Link to={`/nodes/${encodeURIComponent(node.name)}`}>
-                        {node.name}
-                      </Link>{' '}
-                      is offline
-                    </div>
-                    {node.last_seen && (
-                      <div className="activity-time">
-                        Last seen {formatTimeAgo(node.last_seen)}
+        <div className="card bg-base-100 shadow-sm">
+          <div className="card-body">
+            <h2 className="card-title text-base">Alerts</h2>
+            {offlineNodes.length === 0 && weakSignalNodes.length === 0 ? (
+              <div className="text-center py-4 text-base-content/60">
+                <p>No alerts</p>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {offlineNodes.map((node) => (
+                  <li key={node.name} className="flex items-start gap-3">
+                    <span className="w-2 h-2 rounded-full bg-error mt-1.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm">
+                        <Link
+                          to={`/nodes/${encodeURIComponent(node.name)}`}
+                          className="link link-primary"
+                        >
+                          {node.name}
+                        </Link>{' '}
+                        is offline
                       </div>
-                    )}
-                  </div>
-                </li>
-              ))}
-              {weakSignalNodes.map((node) => (
-                <li key={`weak-${node.name}`} className="activity-item">
-                  <span className="activity-dot state" />
-                  <div className="activity-content">
-                    <div className="activity-text">
-                      <Link to={`/nodes/${encodeURIComponent(node.name)}`}>
-                        {node.name}
-                      </Link>{' '}
-                      has weak signal ({node.rssi} dBm)
+                      {node.last_seen && (
+                        <div className="text-xs text-base-content/60">
+                          Last seen {formatTimeAgo(node.last_seen)}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                  </li>
+                ))}
+                {weakSignalNodes.map((node) => (
+                  <li key={`weak-${node.name}`} className="flex items-start gap-3">
+                    <span className="w-2 h-2 rounded-full bg-warning mt-1.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm">
+                        <Link
+                          to={`/nodes/${encodeURIComponent(node.name)}`}
+                          className="link link-primary"
+                        >
+                          {node.name}
+                        </Link>{' '}
+                        has weak signal ({node.rssi} dBm)
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="card">
-        <h2>Recent Nodes</h2>
-        {nodes && nodes.length > 0 ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Status</th>
-                <th>RSSI</th>
-                <th>Last Seen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {nodes.slice(0, 5).map((node) => (
-                <tr key={node.name}>
-                  <td>
-                    <Link to={`/nodes/${encodeURIComponent(node.name)}`}>
-                      {node.name}
-                    </Link>
-                  </td>
-                  <td>
-                    <span className={`status-badge ${node.online ? 'online' : 'offline'}`}>
-                      {node.online ? 'Online' : 'Offline'}
-                    </span>
-                  </td>
-                  <td>{node.rssi !== null ? `${node.rssi} dBm` : '-'}</td>
-                  <td>{node.last_seen ? formatTimeAgo(node.last_seen) : 'Never'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div className="empty-state">
-            <p>No nodes discovered yet</p>
-          </div>
-        )}
-        {nodes && nodes.length > 5 && (
-          <p style={{ marginTop: '1rem' }}>
-            <Link to="/nodes">View all {nodes.length} nodes</Link>
-          </p>
-        )}
+      {/* Recent Nodes */}
+      <div className="card bg-base-100 shadow-sm">
+        <div className="card-body">
+          <h2 className="card-title text-base">Recent Nodes</h2>
+          {nodes && nodes.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>RSSI</th>
+                    <th>Last Seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nodes.slice(0, 5).map((node) => (
+                    <tr key={node.name}>
+                      <td>
+                        <Link
+                          to={`/nodes/${encodeURIComponent(node.name)}`}
+                          className="link link-primary"
+                        >
+                          {node.name}
+                        </Link>
+                      </td>
+                      <td>
+                        <span className={`badge badge-sm ${node.online ? 'badge-success' : 'badge-error'}`}>
+                          {node.online ? 'Online' : 'Offline'}
+                        </span>
+                      </td>
+                      <td>{node.rssi !== null ? `${node.rssi} dBm` : '-'}</td>
+                      <td>{node.last_seen ? formatTimeAgo(node.last_seen) : 'Never'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-base-content/60">
+              <p>No nodes discovered yet</p>
+            </div>
+          )}
+          {nodes && nodes.length > 5 && (
+            <div className="mt-4">
+              <Link to="/nodes" className="link link-primary text-sm">
+                View all {nodes.length} nodes
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

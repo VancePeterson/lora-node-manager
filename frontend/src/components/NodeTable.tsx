@@ -18,47 +18,65 @@ function formatLastSeen(lastSeen: string | null): string {
   return date.toLocaleDateString();
 }
 
+function getSignalBadge(rssi: number): string {
+  if (rssi >= -70) return 'badge badge-success';
+  if (rssi >= -80) return 'badge badge-info';
+  if (rssi >= -90) return 'badge badge-warning';
+  return 'badge badge-error';
+}
+
 export default function NodeTable({ nodes }: NodeTableProps) {
   if (nodes.length === 0) {
     return (
-      <div className="empty-state">
+      <div className="text-center py-8 text-base-content/60">
         <p>No nodes discovered yet</p>
       </div>
     );
   }
 
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Status</th>
-          <th>RSSI</th>
-          <th>SNR</th>
-          <th>Last Seen</th>
-        </tr>
-      </thead>
-      <tbody>
-        {nodes.map((node) => (
-          <tr key={node.name}>
-            <td>
-              <Link to={`/nodes/${encodeURIComponent(node.name)}`}>
-                {node.name}
-              </Link>
-            </td>
-            <td>{node.node_type}</td>
-            <td>
-              <span className={`status-badge ${node.online ? 'online' : 'offline'}`}>
-                {node.online ? 'Online' : 'Offline'}
-              </span>
-            </td>
-            <td>{node.rssi !== null ? `${node.rssi} dBm` : '-'}</td>
-            <td>{node.snr !== null ? `${node.snr.toFixed(1)} dB` : '-'}</td>
-            <td>{formatLastSeen(node.last_seen)}</td>
+    <div className="overflow-x-auto">
+      <table className="table table-zebra">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>RSSI</th>
+            <th>SNR</th>
+            <th>Last Seen</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {nodes.map((node) => (
+            <tr key={node.name}>
+              <td>
+                <Link
+                  to={`/nodes/${encodeURIComponent(node.name)}`}
+                  className="link link-primary"
+                >
+                  {node.name}
+                </Link>
+              </td>
+              <td>
+                <span className={`badge badge-sm ${node.online ? 'badge-success' : 'badge-error'}`}>
+                  {node.online ? 'Online' : 'Offline'}
+                </span>
+              </td>
+              <td>
+                {node.rssi !== null ? (
+                  <span className={`badge badge-sm ${getSignalBadge(node.rssi).replace('badge ', '')}`}>
+                    {node.rssi} dBm
+                  </span>
+                ) : (
+                  '-'
+                )}
+              </td>
+              <td>{node.snr !== null ? `${node.snr.toFixed(1)} dB` : '-'}</td>
+              <td>{formatLastSeen(node.last_seen)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

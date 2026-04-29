@@ -76,7 +76,7 @@ lora/gateway/status          # Gateway health JSON
 ```python
 nodes: dict[str, NodeState] = {
     'node_name': {
-        'name': str, 'address': int, 'node_type': str,
+        'name': str, 'address': int,
         'online': bool, 'last_seen': datetime,
         'rssi': int, 'snr': float, 'telemetry': dict,
         'packets_rx': int, 'gap_count': int

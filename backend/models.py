@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 class NodeState(BaseModel):
     name: str
     address: int
-    node_type: str = "sensor"
     online: bool = False
     last_seen: datetime | None = None
     rssi: int | None = None
@@ -20,7 +19,6 @@ class NodeState(BaseModel):
 class NodeConfig(BaseModel):
     name: str
     address: int
-    node_type: str = "sensor"
     description: str = ""
 
 

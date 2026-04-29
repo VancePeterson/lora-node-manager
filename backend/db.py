@@ -17,7 +17,6 @@ async def init_db() -> None:
             CREATE TABLE IF NOT EXISTS nodes (
                 name TEXT PRIMARY KEY,
                 address INTEGER NOT NULL,
-                node_type TEXT NOT NULL DEFAULT 'sensor',
                 description TEXT DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -79,7 +78,7 @@ async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
 async def get_node_config(name: str) -> NodeConfig | None:
     async with get_db() as db:
         cursor = await db.execute(
-            "SELECT name, address, node_type, description FROM nodes WHERE name = ?",
+            "SELECT name, address, description FROM nodes WHERE name = ?",
             (name,),
         )
         row = await cursor.fetchone()
@@ -87,7 +86,6 @@ async def get_node_config(name: str) -> NodeConfig | None:
             return NodeConfig(
                 name=row["name"],
                 address=row["address"],
-                node_type=row["node_type"],
                 description=row["description"],
             )
         return None
@@ -96,14 +94,13 @@ async def get_node_config(name: str) -> NodeConfig | None:
 async def get_all_node_configs() -> list[NodeConfig]:
     async with get_db() as db:
         cursor = await db.execute(
-            "SELECT name, address, node_type, description FROM nodes"
+            "SELECT name, address, description FROM nodes"
         )
         rows = await cursor.fetchall()
         return [
             NodeConfig(
                 name=row["name"],
                 address=row["address"],
-                node_type=row["node_type"],
                 description=row["description"],
             )
             for row in rows
@@ -115,15 +112,14 @@ async def upsert_node_config(config: NodeConfig) -> None:
     async with get_db() as db:
         await db.execute(
             """
-            INSERT INTO nodes (name, address, node_type, description, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO nodes (name, address, description, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(name) DO UPDATE SET
                 address = excluded.address,
-                node_type = excluded.node_type,
                 description = excluded.description,
                 updated_at = excluded.updated_at
             """,
-            (config.name, config.address, config.node_type, config.description, now, now),
+            (config.name, config.address, config.description, now, now),
         )
         await db.commit()
 

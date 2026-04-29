@@ -2,6 +2,13 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchNode, fetchNodeHistory } from '../api/client';
 
+function getSignalBadge(rssi: number): { className: string; label: string } {
+  if (rssi >= -70) return { className: 'badge badge-success', label: 'Excellent' };
+  if (rssi >= -80) return { className: 'badge badge-info', label: 'Good' };
+  if (rssi >= -90) return { className: 'badge badge-warning', label: 'Fair' };
+  return { className: 'badge badge-error', label: 'Weak' };
+}
+
 export default function NodeDetail() {
   const { name } = useParams<{ name: string }>();
 
@@ -21,180 +28,197 @@ export default function NodeDetail() {
 
   if (nodeLoading) {
     return (
-      <div>
-        <div className="page-header">
-          <h1>Node Details</h1>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Node Details</h1>
+        <div className="card bg-base-100 shadow-sm">
+          <div className="card-body flex flex-row items-center gap-3">
+            <span className="loading loading-spinner loading-md"></span>
+            <span>Loading node details...</span>
+          </div>
         </div>
-        <div className="card">Loading node details...</div>
       </div>
     );
   }
 
   if (nodeError) {
     return (
-      <div>
-        <div className="page-header">
-          <h1>Node Details</h1>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Node Details</h1>
+        <div className="alert alert-error">
+          <span>Error: {(nodeError as Error).message}</span>
         </div>
-        <div className="card">
-          <p>Error: {(nodeError as Error).message}</p>
-          <p style={{ marginTop: '1rem' }}>
-            <Link to="/nodes">Back to nodes</Link>
-          </p>
-        </div>
+        <Link to="/nodes" className="btn btn-ghost">
+          Back to nodes
+        </Link>
       </div>
     );
   }
 
   if (!node) {
     return (
-      <div>
-        <div className="page-header">
-          <h1>Node Details</h1>
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Node Details</h1>
+        <div className="alert alert-warning">
+          <span>Node not found</span>
         </div>
-        <div className="card">
-          <p>Node not found</p>
-          <p style={{ marginTop: '1rem' }}>
-            <Link to="/nodes">Back to nodes</Link>
-          </p>
-        </div>
+        <Link to="/nodes" className="btn btn-ghost">
+          Back to nodes
+        </Link>
       </div>
     );
   }
 
-  const getSignalQuality = (rssi: number): { label: string; color: string } => {
-    if (rssi >= -70) return { label: 'Excellent', color: '#16a34a' };
-    if (rssi >= -80) return { label: 'Good', color: '#65a30d' };
-    if (rssi >= -90) return { label: 'Fair', color: '#d97706' };
-    return { label: 'Weak', color: '#dc2626' };
-  };
-
-  const signalQuality = node.rssi !== null ? getSignalQuality(node.rssi) : null;
+  const signalInfo = node.rssi !== null ? getSignalBadge(node.rssi) : null;
 
   return (
-    <div>
-      <div className="page-header">
-        <p style={{ marginBottom: '0.5rem' }}>
-          <Link to="/nodes">← Back to nodes</Link>
-        </p>
-        <h1>{node.name}</h1>
+    <div className="space-y-6">
+      {/* Header */}
+      <div>
+        <Link to="/nodes" className="btn btn-ghost btn-sm gap-1 mb-2 -ml-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+          Back to nodes
+        </Link>
+        <h1 className="text-2xl font-bold">{node.name}</h1>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="label">Status</div>
-          <div className={`value ${node.online ? 'online' : 'offline'}`}>
+      {/* Stats */}
+      <div className="stats stats-vertical sm:stats-horizontal shadow w-full bg-base-100">
+        <div className="stat">
+          <div className="stat-title">Status</div>
+          <div className={`stat-value text-xl ${node.online ? 'text-success' : 'text-error'}`}>
             {node.online ? 'Online' : 'Offline'}
           </div>
         </div>
-        <div className="stat-card">
-          <div className="label">RSSI</div>
-          <div className="value" style={{ color: signalQuality?.color }}>
-            {node.rssi !== null ? `${node.rssi} dBm` : '-'}
+        <div className="stat">
+          <div className="stat-title">RSSI</div>
+          <div className="stat-value text-xl">
+            {node.rssi !== null ? (
+              <span className={signalInfo?.className}>{node.rssi} dBm</span>
+            ) : (
+              '-'
+            )}
           </div>
         </div>
-        <div className="stat-card">
-          <div className="label">SNR</div>
-          <div className="value">
+        <div className="stat">
+          <div className="stat-title">SNR</div>
+          <div className="stat-value text-xl">
             {node.snr !== null ? `${node.snr.toFixed(1)} dB` : '-'}
           </div>
         </div>
-        <div className="stat-card">
-          <div className="label">Packets</div>
-          <div className="value">{node.packets_rx}</div>
+        <div className="stat">
+          <div className="stat-title">Packets</div>
+          <div className="stat-value text-xl">{node.packets_rx}</div>
         </div>
       </div>
 
-      <div className="grid-2">
-        <div className="card">
-          <h2>Details</h2>
-          <table>
-            <tbody>
-              <tr>
-                <td style={{ fontWeight: 500, width: '140px' }}>Type</td>
-                <td>{node.node_type}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: 500 }}>Address</td>
-                <td>{node.address}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: 500 }}>Signal Quality</td>
-                <td style={{ color: signalQuality?.color }}>
-                  {signalQuality?.label ?? 'Unknown'}
-                </td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: 500 }}>Gap Count</td>
-                <td>{node.gap_count}</td>
-              </tr>
-              <tr>
-                <td style={{ fontWeight: 500 }}>Last Seen</td>
-                <td>
-                  {node.last_seen
-                    ? new Date(node.last_seen).toLocaleString()
-                    : 'Never'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+      {/* Details and Telemetry */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="card bg-base-100 shadow-sm">
+          <div className="card-body">
+            <h2 className="card-title text-base">Details</h2>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <tbody>
+                  <tr>
+                    <td className="font-medium w-36">Address</td>
+                    <td>{node.address}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-medium">Signal Quality</td>
+                    <td>
+                      {signalInfo ? (
+                        <span className={signalInfo.className}>{signalInfo.label}</span>
+                      ) : (
+                        'Unknown'
+                      )}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="font-medium">Gap Count</td>
+                    <td>{node.gap_count}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-medium">Last Seen</td>
+                    <td>
+                      {node.last_seen
+                        ? new Date(node.last_seen).toLocaleString()
+                        : 'Never'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
-        <div className="card">
-          <h2>Telemetry</h2>
-          {Object.keys(node.telemetry).length > 0 ? (
-            <table>
-              <tbody>
-                {Object.entries(node.telemetry).map(([key, value]) => (
-                  <tr key={key}>
-                    <td style={{ fontWeight: 500, width: '140px' }}>{key}</td>
-                    <td>{String(value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="card bg-base-100 shadow-sm">
+          <div className="card-body">
+            <h2 className="card-title text-base">Telemetry</h2>
+            {Object.keys(node.telemetry).length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="table table-sm">
+                  <tbody>
+                    {Object.entries(node.telemetry).map(([key, value]) => (
+                      <tr key={key}>
+                        <td className="font-medium w-36">{key}</td>
+                        <td>{String(value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-base-content/60">
+                <p>No telemetry data</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* RSSI History */}
+      <div className="card bg-base-100 shadow-sm">
+        <div className="card-body">
+          <h2 className="card-title text-base">RSSI History (24h)</h2>
+          {history && history.length > 0 ? (
+            <>
+              <p className="text-sm text-base-content/60 mb-2">
+                {history.length} data points recorded
+              </p>
+              <div className="overflow-x-auto">
+                <table className="table table-sm table-zebra">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>RSSI</th>
+                      <th>SNR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.slice(0, 10).map((entry, idx) => (
+                      <tr key={idx}>
+                        <td>{new Date(entry.timestamp).toLocaleString()}</td>
+                        <td>{entry.rssi} dBm</td>
+                        <td>{entry.snr.toFixed(1)} dB</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {history.length > 10 && (
+                <p className="text-sm text-base-content/60 mt-2">
+                  Showing 10 of {history.length} entries
+                </p>
+              )}
+            </>
           ) : (
-            <div className="empty-state">
-              <p>No telemetry data</p>
+            <div className="text-center py-8 text-base-content/60">
+              <p>No history data available</p>
             </div>
           )}
         </div>
-      </div>
-
-      <div className="card">
-        <h2>RSSI History (24h)</h2>
-        {history && history.length > 0 ? (
-          <div>
-            <p style={{ marginBottom: '1rem' }}>{history.length} data points recorded</p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>RSSI</th>
-                  <th>SNR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.slice(0, 10).map((entry, idx) => (
-                  <tr key={idx}>
-                    <td>{new Date(entry.timestamp).toLocaleString()}</td>
-                    <td>{entry.rssi} dBm</td>
-                    <td>{entry.snr.toFixed(1)} dB</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {history.length > 10 && (
-              <p style={{ marginTop: '0.5rem', color: '#6b7280', fontSize: '0.875rem' }}>
-                Showing 10 of {history.length} entries
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="empty-state">
-            <p>No history data available</p>
-          </div>
-        )}
       </div>
     </div>
   );
