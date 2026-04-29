@@ -277,13 +277,17 @@ ssh root@192.168.0.186 "docker-compose logs -f app"
 # Subscribe to all LoRa topics
 mosquitto_sub -h 192.168.0.186 -t 'lora/#' -v
 
-# Simulate node at address 5
-mosquitto_pub -h 192.168.0.186 -t 'lora/5/state' -m '{"temperature": 25.5, "seq": 1}'
-mosquitto_pub -h 192.168.0.186 -t 'lora/5/online' -m 'online'
-mosquitto_pub -h 192.168.0.186 -t 'lora/5/rssi' -m '-72'
+# Simulate node telemetry (gateway merges rssi/snr into state)
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/state' \
+  -m '{"temperature": 25.5, "seq": 1, "rssi": -72, "snr": 8.5}'
 
-# Test command sending
-mosquitto_sub -h 192.168.0.186 -t 'lora/+/command' -v
+# Send command and watch for response
+mosquitto_sub -h 192.168.0.186 -t 'lora/5/debug' -v &
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/debug' -m 'PING'
+
+# Remote configuration
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/debug' \
+  -m '{"cmd": "SET", "telemetry_interval": 300000}'
 ```
 
 ### Frontend DevTools

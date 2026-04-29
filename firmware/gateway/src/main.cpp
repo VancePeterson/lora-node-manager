@@ -22,7 +22,7 @@ void setupWiFi() {
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-    // Parse topic: lora/{address}/command
+    // Parse topic: lora/{address}/debug
     String topicStr = String(topic);
     int firstSlash = topicStr.indexOf('/');
     int secondSlash = topicStr.indexOf('/', firstSlash + 1);
@@ -32,7 +32,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     String addressStr = topicStr.substring(firstSlash + 1, secondSlash);
     String subtopic = topicStr.substring(secondSlash + 1);
 
-    if (subtopic != "command") return;
+    if (subtopic != "debug") return;
 
     int address = addressStr.toInt();
     String command = "";
@@ -58,16 +58,15 @@ void reconnectMQTT() {
         if (mqtt.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASSWORD)) {
             Serial.println(" connected!");
 
-            // Subscribe to command topics for all nodes
-            String commandTopic = String(MQTT_TOPIC_PREFIX) + "/+/command";
-            mqtt.subscribe(commandTopic.c_str());
+            // Subscribe to debug topics for all nodes
+            String debugTopic = String(MQTT_TOPIC_PREFIX) + "/+/debug";
+            mqtt.subscribe(debugTopic.c_str());
             Serial.print("Subscribed to: ");
-            Serial.println(commandTopic);
+            Serial.println(debugTopic);
 
-            // Publish gateway online status
-            String statusTopic = String(MQTT_TOPIC_PREFIX) + "/gateway/status";
+            // Publish gateway status
+            String statusTopic = String(MQTT_TOPIC_PREFIX) + "/gateway/state";
             JsonDocument doc;
-            doc["online"] = true;
             doc["ip"] = WiFi.localIP().toString();
             doc["uptime"] = millis() / 1000;
 
@@ -81,6 +80,87 @@ void reconnectMQTT() {
             delay(MQTT_RECONNECT_DELAY_MS);
         }
     }
+}
+
+// Publish HA MQTT Discovery message for a single field
+void publishDiscovery(int address, const char* field, const char* deviceClass, const char* unit) {
+    String uid = "lora_" + String(address) + "_" + String(field);
+    String discoveryTopic = "homeassistant/sensor/" + uid + "/config";
+
+    JsonDocument doc;
+    doc["name"] = String(field);
+    doc["state_topic"] = String(MQTT_TOPIC_PREFIX) + "/" + String(address) + "/state";
+    doc["value_template"] = "{{ value_json." + String(field) + " }}";
+    doc["unique_id"] = uid;
+
+    if (strlen(deviceClass) > 0) {
+        doc["device_class"] = deviceClass;
+    }
+    if (strlen(unit) > 0) {
+        doc["unit_of_measurement"] = unit;
+    }
+
+    // Group all fields under one device in HA
+    JsonObject device = doc["device"].to<JsonObject>();
+    device["identifiers"][0] = "lora_node_" + String(address);
+    device["name"] = "LoRa Node " + String(address);
+    device["manufacturer"] = "DIY LoRa";
+    device["model"] = "RYLR998 Node";
+    device["via_device"] = "lora_gateway";
+
+    String payload;
+    serializeJson(doc, payload);
+    mqtt.publish(discoveryTopic.c_str(), payload.c_str(), true);
+
+    Serial.print("Discovery: ");
+    Serial.println(uid);
+}
+
+// Publish discovery for RSSI (always included)
+void publishRssiDiscovery(int address) {
+    String uid = "lora_" + String(address) + "_rssi";
+    String discoveryTopic = "homeassistant/sensor/" + uid + "/config";
+
+    JsonDocument doc;
+    doc["name"] = "RSSI";
+    doc["state_topic"] = String(MQTT_TOPIC_PREFIX) + "/" + String(address) + "/state";
+    doc["value_template"] = "{{ value_json.rssi }}";
+    doc["unit_of_measurement"] = "dBm";
+    doc["device_class"] = "signal_strength";
+    doc["unique_id"] = uid;
+    doc["entity_category"] = "diagnostic";
+
+    JsonObject device = doc["device"].to<JsonObject>();
+    device["identifiers"][0] = "lora_node_" + String(address);
+    device["name"] = "LoRa Node " + String(address);
+
+    String payload;
+    serializeJson(doc, payload);
+    mqtt.publish(discoveryTopic.c_str(), payload.c_str(), true);
+}
+
+// Handle config response from node - register with HA
+void handleConfigResponse(int address, JsonDocument& doc) {
+    if (!doc["fields"].is<JsonArray>()) return;
+
+    Serial.print("Registering node ");
+    Serial.print(address);
+    Serial.println(" with Home Assistant");
+
+    // Register each field the node provides
+    JsonArray fields = doc["fields"].as<JsonArray>();
+    for (JsonObject field : fields) {
+        const char* name = field["name"] | "";
+        const char* deviceClass = field["class"] | "";
+        const char* unit = field["unit"] | "";
+
+        if (strlen(name) > 0) {
+            publishDiscovery(address, name, deviceClass, unit);
+        }
+    }
+
+    // Always register RSSI
+    publishRssiDiscovery(address);
 }
 
 void parseLoRaMessage(const String& message) {
@@ -110,21 +190,35 @@ void parseLoRaMessage(const String& message) {
     Serial.print("]: ");
     Serial.println(data);
 
-    // Publish to MQTT using address-based topics
+    // Parse the JSON payload
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, data);
+
+    // Add gateway metadata
+    doc["rssi"] = rssi;
+    doc["snr"] = snr;
+
+    String enrichedPayload;
+    serializeJson(doc, enrichedPayload);
+
+    // Determine which topic to publish to
     String baseTopic = String(MQTT_TOPIC_PREFIX) + "/" + String(address);
 
-    // Publish state (the data payload - could be JSON or raw)
-    mqtt.publish((baseTopic + "/state").c_str(), data.c_str(), true);
+    // Check if this is a config response
+    if (doc["type"].is<const char*>() && String(doc["type"].as<const char*>()) == "config") {
+        handleConfigResponse(address, doc);
+        mqtt.publish((baseTopic + "/debug").c_str(), enrichedPayload.c_str(), false);
+        return;
+    }
 
-    // Publish signal metrics
-    mqtt.publish((baseTopic + "/rssi").c_str(), String(rssi).c_str(), true);
-    mqtt.publish((baseTopic + "/snr").c_str(), String(snr, 1).c_str(), true);
-
-    // Publish online status
-    mqtt.publish((baseTopic + "/online").c_str(), "online", true);
-
-    // Publish last seen timestamp
-    mqtt.publish((baseTopic + "/last_seen").c_str(), String(millis() / 1000).c_str(), true);
+    // Check if this is a command response (has "ack" field)
+    if (doc["ack"].is<const char*>()) {
+        // Command response -> publish to debug topic (not retained)
+        mqtt.publish((baseTopic + "/debug").c_str(), enrichedPayload.c_str(), false);
+    } else {
+        // Regular telemetry -> publish to state topic (retained)
+        mqtt.publish((baseTopic + "/state").c_str(), enrichedPayload.c_str(), true);
+    }
 }
 
 void processLoRaSerial() {

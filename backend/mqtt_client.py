@@ -51,10 +51,29 @@ def get_node_display_name(node: NodeState) -> str:
 
 
 async def _handle_state_message(address: int, payload: dict[str, Any]) -> None:
+    """Handle telemetry from node (includes rssi/snr from gateway)."""
     node = _get_or_create_node(address)
+
+    # Extract gateway-added metadata
+    rssi = payload.pop("rssi", None)
+    snr = payload.pop("snr", None)
+
+    # Update node state
     node.telemetry = payload
     node.last_seen = datetime.utcnow()
+    node.online = True  # We received data, so it's online
     node.packets_rx += 1
+
+    # Update signal metrics if present
+    if rssi is not None:
+        node.rssi = rssi
+    if snr is not None:
+        node.snr = snr
+
+    # Record RSSI history if we have both values
+    if node.rssi is not None and node.snr is not None:
+        await add_rssi_history(address, node.rssi, node.snr)
+
     _notify_update("node_state", {"address": address, "state": node.model_dump(mode="json")})
     await add_log(
         f"Received telemetry from {get_node_display_name(node)}",
@@ -65,55 +84,40 @@ async def _handle_state_message(address: int, payload: dict[str, Any]) -> None:
     )
 
 
-async def _handle_online_message(address: int, payload: str) -> None:
+async def _handle_debug_message(address: int, payload: dict[str, Any]) -> None:
+    """Handle command response from node."""
     node = _get_or_create_node(address)
-    was_online = node.online
-    node.online = payload.lower() == "online"
     node.last_seen = datetime.utcnow()
-    _notify_update("node_online", {"address": address, "online": node.online})
+    node.online = True
 
-    if node.online != was_online:
-        await add_log(
-            f"{get_node_display_name(node)} is now {'online' if node.online else 'offline'}",
-            level="info" if node.online else "warning",
-            category="node",
-            node_address=address,
-        )
+    # Extract gateway-added metadata
+    rssi = payload.get("rssi")
+    snr = payload.get("snr")
 
-
-async def _handle_rssi_message(address: int, payload: str) -> None:
-    try:
-        rssi = int(payload)
-        node = _get_or_create_node(address)
+    if rssi is not None:
         node.rssi = rssi
-        node.last_seen = datetime.utcnow()
-        if node.snr is not None:
-            await add_rssi_history(address, rssi, node.snr)
-        _notify_update("node_rssi", {"address": address, "rssi": rssi})
-    except ValueError:
-        logger.warning(f"Invalid RSSI value for address {address}: {payload}")
-
-
-async def _handle_snr_message(address: int, payload: str) -> None:
-    try:
-        snr = float(payload)
-        node = _get_or_create_node(address)
+    if snr is not None:
         node.snr = snr
-        node.last_seen = datetime.utcnow()
-        if node.rssi is not None:
-            await add_rssi_history(address, node.rssi, snr)
-        _notify_update("node_snr", {"address": address, "snr": snr})
-    except ValueError:
-        logger.warning(f"Invalid SNR value for address {address}: {payload}")
+
+    _notify_update("node_debug", {"address": address, "response": payload})
+
+    # Log the command response
+    ack = payload.get("ack", "unknown")
+    await add_log(
+        f"Command response from {get_node_display_name(node)}: {ack}",
+        level="info",
+        category="command",
+        node_address=address,
+        details=payload,
+    )
 
 
 async def _handle_gateway_status(payload: dict[str, Any]) -> None:
     global gateway_status
     gateway_status = GatewayStatus(
-        online=True,
         last_seen=datetime.utcnow(),
-        firmware_version=payload.get("firmware_version"),
-        uptime_seconds=payload.get("uptime_seconds"),
+        ip=payload.get("ip"),
+        uptime_seconds=payload.get("uptime"),
         message_count=gateway_status.message_count + 1,
     )
     _notify_update("gateway_status", gateway_status.model_dump(mode="json"))
@@ -183,8 +187,8 @@ class MqttClient:
             logger.warning(f"Invalid UTF-8 payload on {topic}")
             return
 
-        # Gateway status: lora/gateway/status
-        if len(topic_parts) == 3 and topic_parts[1] == "gateway" and topic_parts[2] == "status":
+        # Gateway status: lora/gateway/state
+        if len(topic_parts) == 3 and topic_parts[1] == "gateway" and topic_parts[2] == "state":
             try:
                 payload = json.loads(payload_str)
                 await _handle_gateway_status(payload)
@@ -211,12 +215,13 @@ class MqttClient:
                     await _handle_state_message(address, payload)
                 except json.JSONDecodeError:
                     logger.warning(f"Invalid JSON on {topic}")
-            elif msg_type == "online":
-                await _handle_online_message(address, payload_str)
-            elif msg_type == "rssi":
-                await _handle_rssi_message(address, payload_str)
-            elif msg_type == "snr":
-                await _handle_snr_message(address, payload_str)
+            elif msg_type == "debug":
+                try:
+                    payload = json.loads(payload_str)
+                    await _handle_debug_message(address, payload)
+                except json.JSONDecodeError:
+                    # Debug messages might be plain text commands, ignore those
+                    logger.debug(f"Non-JSON debug message on {topic}: {payload_str}")
 
     async def _run(self) -> None:
         if not self._settings:

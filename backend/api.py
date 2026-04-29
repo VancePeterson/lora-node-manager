@@ -101,8 +101,8 @@ async def send_node_command(address: int, request: CommandRequest) -> CommandRes
 
     node = nodes[address]
     settings = await get_app_settings()
-    # Use address in MQTT topic: lora/{address}/command
-    topic = f"{settings.mqtt_topic_prefix}/{address}/command"
+    # Use address in MQTT topic: lora/{address}/debug
+    topic = f"{settings.mqtt_topic_prefix}/{address}/debug"
 
     try:
         await mqtt_client.publish(topic, request.command)

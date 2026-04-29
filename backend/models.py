@@ -23,9 +23,8 @@ class NodeConfig(BaseModel):
 
 
 class GatewayStatus(BaseModel):
-    online: bool = False
     last_seen: datetime | None = None
-    firmware_version: str | None = None
+    ip: str | None = None
     uptime_seconds: int | None = None
     message_count: int = 0
 

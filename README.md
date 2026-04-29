@@ -24,7 +24,7 @@ RYLR nodes  ──radio──►  ESP32 gateway  ──MQTT──►  Mosquitto 
 
 The add-on is a **peer MQTT consumer** alongside Home Assistant. It does not sit in the data path — the gateway publishes MQTT independently.
 
-Nodes are identified by their **LoRa address** (integer). MQTT topics use this address: `lora/{address}/state`, `lora/{address}/command`, etc. Display names can be assigned in the UI without affecting MQTT routing.
+Nodes are identified by their **LoRa address** (integer). Each node has two MQTT topics: `lora/{address}/state` for telemetry and `lora/{address}/debug` for commands/responses. Display names can be assigned in the UI without affecting MQTT routing.
 
 ### Why a Supervisor Add-on?
 

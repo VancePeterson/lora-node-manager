@@ -100,23 +100,60 @@ schema:
 
 Topics use the node's LoRa address as the identifier. This keeps the gateway simple (no name configuration needed) and allows display names to be changed without affecting MQTT routing.
 
+Each node has just two topics:
+
 ```
-lora/{address}/state      # Decoded telemetry JSON
-lora/{address}/online     # "online" or "offline"
-lora/{address}/rssi       # Last received RSSI
-lora/{address}/snr        # Last received SNR
-lora/{address}/last_seen  # Unix timestamp
-lora/{address}/gap_count  # Missed sequence numbers
-lora/{address}/command    # Commands TO the node
-lora/gateway/status       # Gateway health
+lora/{address}/state      # Telemetry + gateway metadata (retained)
+lora/{address}/debug      # Commands and responses (not retained)
+lora/gateway/state        # Gateway health
 ```
 
-Example for node at address 5 (display name: "Chicken Coop"):
+The gateway enriches node telemetry with signal metrics:
+
+```json
+{
+  "temperature": 22.5,
+  "humidity": 65.0,
+  "seq": 42,
+  "rssi": -72,
+  "snr": 8.5
+}
 ```
-lora/5/state
-lora/5/online
-lora/5/command
+
+The `debug` topic works like a serial terminal - send commands, receive responses on the same topic.
+
+### Node Commands
+
+Nodes respond to plain text commands:
+
+| Command | Description |
+|---------|-------------|
+| `PING` | Returns `{"ack": "PING", "result": "PONG"}` |
+| `STATUS` | Returns uptime, address, heap size |
+| `CONFIG?` | Returns HA discovery field definitions |
+| `SETTINGS?` | Returns current node settings |
+| `REBOOT` | Restarts the node |
+| `SLEEP` | Enter deep sleep immediately |
+| `DEFAULTS` | Reset all settings to defaults |
+
+### Remote Node Configuration
+
+Node settings can be updated remotely via JSON commands:
+
+```json
+{"cmd": "SET", "telemetry_interval": 300000}
+{"cmd": "SET", "deep_sleep": true, "sleep_duration": 600000}
+{"cmd": "SET", "tx_power": 15}
 ```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `telemetry_interval` | 60000 | Telemetry send interval (ms) |
+| `deep_sleep` | false | Sleep between transmissions |
+| `sleep_duration` | 60000 | Deep sleep duration (ms) |
+| `tx_power` | 22 | RYLR998 TX power (0-22 dBm) |
+
+Settings are persisted to ESP32 flash (NVS).
 
 ### Frame Format
 

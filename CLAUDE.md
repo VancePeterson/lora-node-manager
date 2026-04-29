@@ -43,8 +43,11 @@ ssh root@192.168.0.186 "docker-compose logs -f"
 
 # MQTT debugging
 mosquitto_sub -h 192.168.0.186 -t 'lora/#' -v
-mosquitto_pub -h 192.168.0.186 -t 'lora/5/state' -m '{"temp": 25}'
-mosquitto_pub -h 192.168.0.186 -t 'lora/5/online' -m 'online'
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/state' -m '{"temp":25,"seq":1,"rssi":-72,"snr":8.5}'
+
+# Send command to node
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/debug' -m 'PING'
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/debug' -m '{"cmd":"SET","telemetry_interval":300000}'
 ```
 
 ### Firmware (from `/firmware`)
@@ -89,22 +92,39 @@ def get_node_display_name(node: NodeState) -> str:
 
 ### MQTT Topic Structure (prefix: `lora`)
 
-Topics use the node's address as the identifier:
+Each node has two topics:
 ```
-lora/{address}/state       # Decoded telemetry (JSON, retained)
-lora/{address}/online      # "online" or "offline" (retained)
-lora/{address}/rssi        # dBm value
-lora/{address}/snr         # dB float
-lora/{address}/command     # Commands TO the node (published by manager)
-lora/gateway/status        # Gateway health JSON
+lora/{address}/state       # Telemetry + gateway metadata (retained)
+lora/{address}/debug       # Commands and responses (not retained, bidirectional)
+lora/gateway/state         # Gateway health JSON
 ```
 
-Example for node at address 5 (display name: "Chicken Coop"):
+The gateway merges RSSI/SNR into the node's telemetry:
+```json
+{"temperature": 22.5, "humidity": 65, "seq": 42, "rssi": -72, "snr": 8.5}
 ```
-lora/5/state
-lora/5/online
-lora/5/command
+
+The `debug` topic works like a serial terminal - publish commands, receive responses.
+
+### Node Commands
+
+Built-in commands (plain text):
+- `PING` - Returns PONG
+- `STATUS` - Returns uptime, address, heap
+- `CONFIG?` - Returns HA discovery fields
+- `SETTINGS?` - Returns current node settings
+- `REBOOT` - Restarts node
+- `SLEEP` - Enter deep sleep immediately
+- `DEFAULTS` - Reset settings to defaults
+
+Remote configuration (JSON):
+```json
+{"cmd": "SET", "telemetry_interval": 300000}
+{"cmd": "SET", "deep_sleep": true, "sleep_duration": 600000}
+{"cmd": "SET", "tx_power": 15}
 ```
+
+Settings are persisted to ESP32 flash.
 
 ### API Endpoints
 
