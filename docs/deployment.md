@@ -141,9 +141,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
 # Install Python dependencies
-COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # Copy backend code
 COPY backend/ ./
@@ -158,7 +161,7 @@ RUN mkdir -p /data
 EXPOSE 8080
 
 # Run the application
-CMD ["python", "main.py"]
+CMD ["uv", "run", "python", "main.py"]
 ```
 
 ## Updating the Add-on

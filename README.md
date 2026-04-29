@@ -8,9 +8,9 @@ LoRa Node Manager provides a dedicated sidebar panel in Home Assistant for:
 
 - **Node Inventory** — View all nodes with status, RSSI, SNR, and link quality
 - **Live Telemetry** — Decoded sensor data in human-readable units
-- **Link Quality Monitoring** — 24-hour RSSI/SNR charts, gap detection
-- **Node Provisioning** — Wizard to add new nodes with AT command generation
+- **Link Quality Monitoring** — 24-hour RSSI/SNR history, gap detection
 - **Command Panel** — Send commands to nodes directly from the UI
+- **Network View** — Signal strength visualization across all nodes
 
 This replaces the "wall of unrelated MQTT entities" experience that Home Assistant's default UI provides for multi-node LoRa networks.
 
@@ -24,6 +24,8 @@ RYLR nodes  ──radio──►  ESP32 gateway  ──MQTT──►  Mosquitto 
 
 The add-on is a **peer MQTT consumer** alongside Home Assistant. It does not sit in the data path — the gateway publishes MQTT independently.
 
+Nodes are identified by their **LoRa address** (integer). MQTT topics use this address: `lora/{address}/state`, `lora/{address}/command`, etc. Display names can be assigned in the UI without affecting MQTT routing.
+
 ### Why a Supervisor Add-on?
 
 - **Ingress support** — Sidebar registration + HA auth proxying via manifest
@@ -33,13 +35,15 @@ The add-on is a **peer MQTT consumer** alongside Home Assistant. It does not sit
 
 ## Tech Stack
 
-| Layer    | Technology           |
-|----------|----------------------|
-| Backend  | Python 3.12, FastAPI |
-| Frontend | React, Vite, TypeScript |
-| Database | SQLite               |
-| Protocol | MQTT (via Mosquitto) |
-| Runtime  | Docker (HA Supervisor) |
+| Layer    | Technology                      |
+|----------|---------------------------------|
+| Backend  | Python 3.12, FastAPI, uv        |
+| Frontend | React, Vite, TypeScript         |
+| Styling  | TailwindCSS, DaisyUI            |
+| Database | SQLite                          |
+| Protocol | MQTT (via Mosquitto)            |
+| Runtime  | Docker (HA Supervisor)          |
+| Firmware | PlatformIO (ESP32)              |
 
 ## Project Structure
 
@@ -50,20 +54,34 @@ lora-node-manager/
 ├── run.sh                   # Container entrypoint
 ├── backend/
 │   ├── main.py              # FastAPI app entry
+│   ├── api.py               # REST + WebSocket endpoints
 │   ├── mqtt_client.py       # Async MQTT subscriber
 │   ├── db.py                # SQLite persistence
-│   └── api.py               # REST + WebSocket endpoints
-└── frontend/
-    ├── package.json
-    ├── vite.config.ts       # base: "./" for ingress
-    └── src/
-        ├── App.tsx
-        └── pages/
-            ├── Inventory.tsx
-            ├── NodeDetail.tsx
-            ├── AddNode.tsx
-            ├── Logs.tsx
-            └── Gateway.tsx
+│   ├── models.py            # Pydantic models
+│   └── pyproject.toml       # Dependencies (uv)
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.ts       # base: "./" for ingress
+│   ├── tailwind.config.js
+│   └── src/
+│       ├── App.tsx          # Router, DaisyUI drawer layout
+│       ├── context/
+│       │   └── ThemeContext.tsx
+│       ├── pages/
+│       │   ├── Dashboard.tsx
+│       │   ├── Nodes.tsx
+│       │   ├── NodeDetail.tsx
+│       │   ├── Network.tsx
+│       │   ├── Commands.tsx
+│       │   ├── Logs.tsx
+│       │   └── Settings.tsx
+│       └── components/
+│           ├── NodeTable.tsx
+│           └── CreateNodeModal.tsx
+└── firmware/
+    ├── gateway/             # ESP32 MQTT gateway
+    ├── nodes/               # Generic node template
+    └── shared/              # Protocol definitions
 ```
 
 ## Installation
@@ -80,7 +98,7 @@ lora-node-manager/
 
 - Home Assistant OS (HAOS)
 - MQTT broker (Mosquitto add-on)
-- ESP32 gateway running compatible firmware
+- ESP32 gateway running compatible firmware (see `firmware/gateway/`)
 
 ## Documentation
 
@@ -88,6 +106,7 @@ lora-node-manager/
 - [Development](docs/development.md) — Local development setup
 - [Deployment](docs/deployment.md) — Deploying to HAOS
 - [MQTT Topics](docs/mqtt-topics.md) — Topic structure and payloads
+- [Firmware](firmware/README.md) — Gateway and node firmware
 
 ## License
 

@@ -4,6 +4,7 @@
 
 - Python 3.12+
 - Node.js 20+
+- uv (Python package manager)
 - Docker (for local MQTT broker)
 - SSH access to development LXC
 
@@ -29,10 +30,8 @@ For rapid iteration, run the backend and frontend locally:
 ```bash
 # Terminal 1: Backend
 cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8080
+uv sync
+DB_PATH=./lora_manager.db uv run uvicorn main:app --reload --port 8080
 
 # Terminal 2: Frontend
 cd frontend
@@ -62,10 +61,7 @@ cd /mnt/c/Users/Vance/Projects/Personal/lora-node-manager
 
 # Backend setup
 cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt  # pytest, ruff, etc.
+uv sync
 
 # Frontend setup
 cd ../frontend
@@ -81,7 +77,7 @@ Create `.env` files for local development:
 MQTT_HOST=localhost
 MQTT_PORT=1883
 MQTT_TOPIC_PREFIX=lora
-DATABASE_PATH=./data/lora_manager.db
+DB_PATH=./lora_manager.db
 DEBUG=true
 ```
 
@@ -100,7 +96,7 @@ Edit code in your preferred editor on Windows/WSL.
 
 ```bash
 # Run with hot reload
-cd backend && uvicorn main:app --reload
+cd backend && uv run uvicorn main:app --reload --port 8080
 cd frontend && npm run dev
 ```
 
@@ -136,7 +132,7 @@ cd ..
 
 echo "Syncing to LXC..."
 rsync -avz --delete \
-  --exclude 'venv' \
+  --exclude '.venv' \
   --exclude 'node_modules' \
   --exclude '__pycache__' \
   --exclude '.git' \
@@ -185,7 +181,7 @@ services:
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
       - MQTT_TOPIC_PREFIX=lora
-      - DATABASE_PATH=/data/lora_manager.db
+      - DB_PATH=/data/lora_manager.db
     volumes:
       - ./data:/data
     depends_on:
@@ -215,8 +211,8 @@ allow_anonymous true
 
 ```bash
 cd backend
-pytest
-pytest --cov=. --cov-report=html  # Coverage report
+uv run pytest
+uv run pytest --cov=. --cov-report=html  # Coverage report
 ```
 
 ### Frontend Tests
@@ -232,7 +228,7 @@ npm run test:coverage
 ```bash
 # Requires LXC running with Mosquitto
 cd backend
-pytest tests/integration/ --mqtt-host=192.168.0.186
+uv run pytest tests/integration/ --mqtt-host=192.168.0.186
 ```
 
 ## Code Quality
@@ -242,8 +238,8 @@ pytest tests/integration/ --mqtt-host=192.168.0.186
 ```bash
 # Backend
 cd backend
-ruff check .
-ruff format .
+uv run ruff check .
+uv run ruff format .
 
 # Frontend
 cd frontend
@@ -256,7 +252,7 @@ npm run format
 ```bash
 # Backend
 cd backend
-mypy .
+uv run mypy .
 
 # Frontend
 cd frontend
@@ -269,7 +265,7 @@ npm run typecheck
 
 ```bash
 # Local
-uvicorn main:app --reload --log-level debug
+uv run uvicorn main:app --reload --log-level debug
 
 # LXC
 ssh root@192.168.0.186 "docker-compose logs -f app"
@@ -281,8 +277,13 @@ ssh root@192.168.0.186 "docker-compose logs -f app"
 # Subscribe to all LoRa topics
 mosquitto_sub -h 192.168.0.186 -t 'lora/#' -v
 
-# Publish test message
-mosquitto_pub -h 192.168.0.186 -t 'lora/test_node/state' -m '{"temp": 25.5}'
+# Simulate node at address 5
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/state' -m '{"temperature": 25.5, "seq": 1}'
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/online' -m 'online'
+mosquitto_pub -h 192.168.0.186 -t 'lora/5/rssi' -m '-72'
+
+# Test command sending
+mosquitto_sub -h 192.168.0.186 -t 'lora/+/command' -v
 ```
 
 ### Frontend DevTools
@@ -314,6 +315,18 @@ docker-compose ps
 
 # Test connectivity
 nc -zv mosquitto 1883
+```
+
+### Database Schema Mismatch
+
+**Symptom**: `table X has no column named Y`
+
+**Cause**: Database was created with old schema
+
+**Fix**: Delete the database file and restart:
+```bash
+rm backend/lora_manager.db
+# Restart backend
 ```
 
 ### Hot Reload Not Working

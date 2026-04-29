@@ -47,6 +47,19 @@ mosquitto_pub -h 192.168.0.186 -t 'lora/5/state' -m '{"temp": 25}'
 mosquitto_pub -h 192.168.0.186 -t 'lora/5/online' -m 'online'
 ```
 
+### Firmware (from `/firmware`)
+```bash
+# Gateway
+cd firmware/gateway
+pio run -t upload                        # Build and upload
+pio device monitor                       # Serial monitor
+
+# Node (set address via build flag)
+cd firmware/nodes
+pio run -t upload                        # Default address 5
+pio run -t upload --build-flag="-DLORA_ADDRESS=10"  # Custom address
+```
+
 ## Architecture
 
 ### Key Design Patterns
